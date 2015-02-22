@@ -1,0 +1,401 @@
+;~500 bytes, deze routine is zon beetje klaar..
+add_batterij:
+	LD	hl,batterij
+	inc	(HL)
+	LD	A,(frame)
+	LD	(batterijframe),A
+	LD	A,8
+	LD	(menu2),A
+	call	display_batterij
+	ret
+	
+batterij_update:
+	LD	A,(frame)
+	LD	B,A
+	LD	A,(batterijframe)
+	sub	B
+	and	63
+	jr	nz,ddd
+	xor	a
+	LD	(menu2),A
+ddd:
+	LD	A,(menu2)
+	LD	B,A
+	LD	A,(menu2_temp)
+	CP	B	;menu_temp-menu
+	RET	Z
+	
+	JR	C,_menu2	;carry geflagd als menu groter is, dus increasen
+	DEC	A
+	DEC	A	;dit met die inc/dec is echt zoo handig..
+_menu2:
+	INC	A
+	LD	(menu2_temp),A
+	RET
+
+
+update_X_scroll:
+	LD	HL,(X_pos_temp)
+	LD	DE,-(breedte*4)+12
+	ADD	HL,DE
+	RET	NC
+	LD	(X_scroll),HL
+	RET
+	
+update_Y_scroll:
+	LD	DE,-(hoogte*4)+12
+	LD	HL,(Y_pos_temp)
+	
+	ADD	HL,DE
+	RET	NC		;eigelijk kan die wel weg...
+	LD	A,(menu_temp)
+	SRL	A
+	LD	E,A
+	LD	D,0
+	add	HL,DE	
+	LD	(Y_scroll),HL
+	RET	
+	
+update_menu:
+	LD	A,(menu)
+	LD	B,A
+	LD	A,(menu_temp)
+	CP	B	;menu_temp-menu
+	RET	Z
+	
+	JR	C,_menu	;carry geflagd als menu groter is, dus increasen
+	DEC	A
+	DEC	A	;dit met die inc/dec is echt zoo handig..
+_menu:
+	INC	A
+	LD	(menu_temp),A
+	RET
+	
+
+
+scroll_horizontal_check:
+	LD	HL,(X_scroll)
+	LD	DE,(X_scroll_temp)
+	dec de\ dec de\ dec de\ dec de	;quick fix
+	bit	7,D
+	JP	NZ,scroll_right3
+	inc de\ inc de\ inc de\ inc de
+	or 	a
+	sbc 	hl,de
+	add 	hl,de
+	RET	Z
+	JP	C,scroll_left
+	JP	scroll_right
+
+scroll_vertical_check
+	LD	HL,(Y_scroll)
+	LD	DE,(Y_scroll_temp)
+	or 	a
+	sbc 	hl,de
+	add 	hl,de
+	RET	Z
+	JP	C,scroll_UP
+	JP	scroll_down
+
+	
+	
+	
+scroll_left:
+	LD	HL,(X_scroll_temp)
+	LD	DE,5
+	or	a
+	sbc	HL,De
+	ADD	HL,DE
+	RET	C
+	push	HL
+	LD	A,L
+	AND	%00000111
+	CALL	Z,draw_left_part	;tekenen als hij 0 was
+	pop	HL
+	DEC	HL
+	LD	(X_scroll_temp),HL
+
+scroll_left_nocheck:	;voor het geval ik wil scrollen zonder aan de xpos te zitten...
+	LD	B,8*hoogte
+	LD	HL,grbuf
+scroll_left_loop:
+	SRL	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	RR	(HL)\ inc	HL
+	DJNZ	scroll_left_loop
+	RET	
+
+scroll_right:
+	
+	LD	DE,(X_scroll_max)
+	OR	A
+	SBC	HL,DE
+	ADD	HL,DE
+	RET	NC
+scroll_right3:	
+	LD	HL,(X_scroll_temp)
+	push	HL
+	LD	A,L
+	AND	%00000111
+	CALL	Z,draw_right_part
+	POP	HL
+	INC	HL
+	LD	(X_scroll_temp),HL
+
+scroll_right_nocheck:	
+	LD	B,8*hoogte
+	LD	HL,bufferend
+scroll_right_loop:
+	SLA	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	RL	(HL)\ dec	HL
+	DJNZ	scroll_right_loop
+	RET
+	
+
+scroll_down:
+	LD	DE,(Y_scroll_max)
+	LD	A,(menu)
+	LD	L,A
+	LD	H,0
+	ADD	HL,DE
+	EX	DE,HL
+	
+	
+	LD	HL,(Y_scroll_temp)
+	OR	A
+	SBC	HL,DE
+	ADD	HL,DE
+	RET	NC
+		
+	push	HL
+	LD	A,L
+	AND	%00000111
+	CALL	Z,draw_bottom_part
+	pop	HL
+	INC	HL
+	LD	(Y_scroll_temp),HL
+
+scroll_down_nocheck:
+	LD	DE,grbuf
+	LD	HL,grbuf + breedte
+	LD	BC,breedte*(8*hoogte-1)
+scroll_down_loop:
+	
+	LDI\ LDI\ LDI\ LDI	;LDD is 15 clocks, LDDR is 21
+	LDI\ LDI\ LDI\ LDI	;je bespaart 6 clocks per LLDDR
+	LDI\ LDI\ LDI\ LDI	;(6*14-12)*hoogte*8 = 5760 clocks verschil :)
+	LDI\ LDI		;met LDIR kost het trouwens 23226 insr., dus 25% tijdwinst
+	JP	PE,scroll_down_loop	;PE?!?! inderdaad...
+	RET
+	
+scroll_up:
+	LD	HL,(Y_scroll_temp)
+	LD	DE,5
+	or	a
+	sbc	HL,De
+	ADD	HL,DE
+	RET	C
+	
+	push	HL
+	LD	A,L
+	AND	%00000111
+	CALL	Z,draw_top_part
+	pop	HL
+	DEC	HL
+	LD	(Y_scroll_temp),HL
+scroll_up_nocheck:
+	LD	DE,bufferend
+	LD	HL,bufferend-breedte
+	LD	BC,breedte*(8*hoogte-1)
+scroll_up_loop:
+	LDD\ LDD\ LDD\ LDD	
+	LDD\ LDD\ LDD\ LDD	
+	LDD\ LDD\ LDD\ LDD		;deze doet het niet... uhuu?
+	LDD\ LDD		
+	JP	PE,scroll_UP_loop
+	RET
+	
+	
+draw_bottom_part:
+;je tekent aligned, de onderste zooi
+;eerst halen we het sprite adres:
+	CALL	get_tile_X_aligned	;het boeit niet dat je die in de bovenhoek krijgt...
+	
+	LD	HL,hoogte-1
+	CALL	HL_times_mapwidth
+	EX	DE,HL
+		
+	ADD	IX,DE
+	LD	DE,grbuf+(breedte*(8*(hoogte-1)))
+	LD	B,14
+draw_bottom_part_loop:
+	push	BC
+	
+	LD	L,(IX)\ INC IX		;ix tileadres
+	LD	H,0			;zero msb
+	ADD HL,HL\ ADD HL,HL\ ADD HL,HL	;*sprite height
+	LD	BC,tile_sprites
+	ADD	HL,BC
+	CALL	put_8_bytes
+	
+	pop	BC
+	DJNZ	draw_bottom_part_loop
+
+	LD	A,(X_scroll_temp)
+	and	%00000111
+	RET	Z
+;naar links shiften, call de scroll_right routine
+
+draw_bottom_shift_loop:	
+	LD	HL,grbuf+(breedte*(8*hoogte))-1
+	LD	B,8
+	CALL	scroll_right_loop
+	DEC	A
+	JR	NZ,draw_bottom_shift_loop
+	RET
+	
+	
+draw_top_part:
+;je tekent aligned, de onderste zooi
+;eerst halen we het sprite adres:
+	CALL	get_tile_X_aligned	;het boeit niet dat je die in de bovenhoek krijgt...
+	LD	DE,grbuf
+	LD	B,breedte
+draw_top_part_loop:
+	push	BC
+	
+	LD	L,(IX)\ INC IX		;ix tileadres
+	LD	H,0			;zero msb
+	ADD HL,HL\ ADD HL,HL\ ADD HL,HL	;*sprite height
+	LD	BC,tile_sprites
+	ADD	HL,BC
+	CALL	put_8_bytes
+	
+	pop	BC
+	DJNZ	draw_top_part_loop
+
+	LD	A,(X_scroll_temp)
+	and	%00000111
+	RET	Z
+;naar links shiften, call de scroll_right routine
+
+draw_top_shift_loop:	
+	LD	HL,grbuf+(breedte*8)-1
+	LD	B,8
+	CALL	scroll_right_loop
+	DEC	A
+	JR	NZ,draw_top_shift_loop
+	RET
+
+	
+draw_left_part:
+	CALL	get_tile_X_aligned
+	CALL	draw_side
+	RET
+
+
+draw_right_part:
+	CALL	get_tile_X_aligned
+	LD	BC,breedte-1	;tile in rechterhoek+13 = tile in linkerhoek
+	ADD	IX,BC
+	LD	HL,breedte-1	;naar correcte startadres gaan
+	ADD	HL,DE
+	EX	DE,HL
+	CALL	draw_side
+	
+
+
+draw_side:
+	LD	B,hoogte-1	;13 atm
+;als het goed is bevat a nog steeds mod(y)8
+;dus, b moet 14 worden als dat 0 is:
+	or 	a
+	JR	Z,draw_side_loop
+	inc	B	
+draw_side_loop:
+	push	BC
+	
+	LD	L,(IX)		;ix tileadres
+	LD	H,0		;zero msb
+	ADD HL,HL\ ADD HL,HL\ ADD HL,HL		;*sprite height
+	LD	BC,tile_sprites
+	ADD	HL,BC		;HL=source
+	CALL	put_8_bytes
+	
+	LD	HL,(breedte*8)-1	;omlaag
+	ADD	HL,DE
+	EX	DE,HL
+	
+	LD	BC,tilemap_breedte		;en nog een keer
+	ADD	IX,BC	
+	
+	pop	BC
+	DJNZ	draw_side_loop
+	RET
+	
+	
+
+get_tile_X_aligned:
+;returns tile source in IX,
+;correct adress in DE
+	LD	IX,(iMathPtr1)
+	LD	DE,(X_scroll_temp)
+	SRA	D\ RR	E
+	SRA	D\ RR	E
+	SRA	D\ RR	E	
+	DEC	DE
+	ADD	IX,DE
+	
+	LD	HL,(Y_scroll_temp)
+	LD	A,L
+	;NEG			;is 2 bytes... triest gewoon
+	AND	%00000111
+			
+	SRA	H\ RR	L	;/8
+	SRA	H\ RR	L
+	SRA	H\ RR	L
+	DEC	HL		;al teken je 0,0, moet je eigelijk -1,-1 tekenen
+	
+	CALL	HL_times_mapwidth
+	EX	DE,HL
+	ADD	IX,DE	;IX=tilemap source
+	
+	LD	H,0
+	LD	L,A
+	LD	B,H	;zero
+	LD	C,A
+	ADD	HL,HL	;2
+	ADD	HL,BC	;3
+	ADD	HL,HL	;6
+	ADD	HL,BC	;7
+	ADD	HL,HL	;14
+		
+	LD	DE,grbuf	;DE is en blijft besteming
+	EX	DE,HL
+	OR	A
+	SBC	HL,DE
+	EX	DE,HL
+	RET 

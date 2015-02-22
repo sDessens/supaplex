@@ -1,0 +1,622 @@
+;21 tiles, LZ77
+
+;veel voorkomende tiles, 3 byte
+;niets		|	000
+;base		|	001
+;zonk		| 	010
+;infotron		|	011
+;muur		|	100
+;muur		|	101
+
+;redelijk vaak voorkomende tiles (30 / L), 12 in totaal
+;poortjes 4x	|110-	0000,0001,0010,0011
+;poortjes 2x	| 	0100,0101
+;LP	|	0110
+;batterij	|	0111
+;floppy	|	1000
+;schaar	|	1001
+;electron	|	1010
+;bug	|	1011
+
+;uncommon tiles:
+;poortje 1x	|110-	1100
+;end-block	|	1101
+;start-block	|	1110
+;terminal	|	1111
+
+;ongebruikt: 111 -> gebruiken voor LZ77:
+;111, lengt (5), pos (8), voorbeeld:
+;111 01010, 10000000 (7,10,128)
+;kopier 10+3 bytes van (HL - 128) naar (HL)
+
+#define EQU .equ
+#define bcall(xxx) B_CALL(xxx)
+#define Bjump(xxx) B_jump(xxx)
+#include "relocate.inc"
+#include "ti83plusasm.inc"
+#include "app.inc"
+
+bytecounter 	.equ 	statvars
+stringcounter 	.equ 	statvars + 2
+mem_i_need 	.equ 	3000
+stringsize	.equ	8000
+
+.org	$4000
+defpage(0,"Compress") 
+
+ di
+	LD	HL,0
+	LD	(bytecounter),hl
+	LD	(stringcounter),HL
+ jp fetch_tilemap_mem
+
+
+level_0:
+;INCLUDE DATA HERE
+#include "levels/002.z80"
+
+
+fetch_tilemap_mem:
+	call	create_string
+
+
+	ld hl,mem_i_need	;a multiple of 9
+	BCALL(_EnoughMem)
+	jp nc,_
+	bjump(_JForceCmdNoChar)
+_
+	ld de,mem_i_need
+	ld hl,(FPS)
+	ld (iMathPtr1),hl
+	add hl,de
+	ld (FPS),hl
+		
+compress_main:
+	
+	call	disphl
+	call	lz77_test
+	call	haufmann
+	call	convert_to_string
+	bjump(_JForceCmdNoChar)
+
+
+
+		
+haufmann:	;imathptr3 is het aantal bits, begint bij 0
+	LD	A,0
+	LD	(imathptr3),A
+	;data zit in (imathptr2)+6000
+	LD	HL,(imathptr2)
+	LD	DE,6000
+	add	hl,de
+	push	hl
+	pop	IX	;IX=doel, hl=bron
+	
+	LD	BC,2000
+
+haufmann_loop
+	 push BC
+	 LD	A,(HL)
+	 cp	$30
+	 jp	z,add3bytes
+	 
+	 cp	6
+	 jr nc,bigbyte
+	 LD	B,3
+	 call	pushbyte
+	 inc	hl
+	 jp	haufmann_end
+bigbyte:
+	LD B,7
+	
+	cp	19
+	jr	c,bigbyteok2
+	dec	a
+bigbyteok2
+	cp	20
+	jr	c,bigbyteok
+	dec	a	
+bigbyteok
+	
+	and	%00001111
+	or	%01100000
+	; cp 6\ LD c,%1100000\ jr z,bigbytedone
+	; cp 7\ LD c,%1100001\ jr z,bigbytedone
+	; cp 8\ LD c,%1100010\ jr z,bigbytedone
+	; cp 9\ LD c,%1100011\ jr z,bigbytedone
+	; cp 10\ LD c,%1100100\ jr z,bigbytedone
+	; cp 11\ LD c,%1100101\ jr z,bigbytedone
+	; cp 12\ LD c,%1101100\ jr z,bigbytedone
+	; cp 13\ LD c,%1101111\ jr z,bigbytedone
+	; cp 14\ LD c,%1101000\ jr z,bigbytedone
+	; cp 15\ LD c,%1100110\ jr z,bigbytedone
+	; cp 16\ LD c,%1100111\ jr z,bigbytedone
+	; cp 17\ LD c,%1101001\ jr z,bigbytedone
+	; cp 18\ LD c,%1101010\ jr z,bigbytedone
+	; cp 19\ LD c,%1101011\ jr z,bigbytedone
+	; cp 20\ LD c,%1101101\ jr z,bigbytedone
+	; cp 22\ LD c,%1101110\ jr z,bigbytedone
+	; LD c,%1101111
+bigbytedone:
+	sub	6
+	and	%00001111
+	or	%01100000
+	call	pushbyte
+	inc	hl
+	jr	haufmann_end
+	 
+add3bytes:	 ;dus *string found*, dump een string teken op de stack pus 2 info bytes
+	 LD	A,%00000111
+	 LD	B,3
+	 call	pushbyte	;string token
+	 inc	hl
+	 LD	A,(HL)
+	 LD	B,8
+	 call	pushbyte	;BT, max ~256
+	 inc	hl
+	 LD	A,(HL)
+	 LD	B,5	;max $IF dus 5 bits
+	 call	pushbyte
+	 inc	hl
+	
+haufmann_end:
+	pop bc
+	dec	BC
+	LD	A,B
+	or	c
+	jp	nz,haufmann_loop
+	
+	;LET OP ik moet de laatste byte nog alignen: shiften totdat (imathptr3) % 7 = 0
+	ret
+
+pushbyte:	;input: B aantal bytes, A getal	
+	push	bc
+pushbyte2
+	rr	a
+	rl	c
+	djnz	pushbyte2
+	LD	A,C
+	pop	bc
+pushbyte3
+	rr	a
+	rl	(IX)	;uitendelijk kan je het opvatten als 1 grote reeks  bytes, bij uitpakken alles naar links shiften	
+	call	nextbit
+	djnz	pushbyte3
+	ret
+			
+nextbit:	;increment pointer (IX) plus (imathprt3), DESTROYS niets
+	push	BC
+	LD	B,A
+	LD	A,(imathptr3)
+	inc	a
+	and	7
+	LD	(imathptr3),A
+	LD	A,B
+	pop	bc
+	ret	nz
+	inc	IX
+	ret
+	
+;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+cpstr:	;zero flag geset = suc
+	LD	A,(DE)	;backtrack string
+	cp	(ix)	;string bij begin
+	ret	nz
+	
+	inc	de
+	inc	ix
+	djnz	cpstr
+	ret
+
+
+lz77_test:	;aka compress
+ DI
+ ;in a, (2)
+ ;rla
+ ;sbc a, a
+ ;out (20h), a	;turbo mode starting in 3.. 2.. 1..
+ 
+	;eerst byte 1 op de string dumpen:
+	
+	LD	De,(imathptr2)		;get string base..
+	LD	HL,6000		
+	add	hl,de		;add index
+	LD	IX,level_0	;begin
+	LD	A,(IX)	
+	LD	(HL),A		;store on that location
+	
+	LD	HL,(bytecounter)		;and increment size
+	inc	hl
+	LD	(bytecounter),HL
+	;daarna vars klaarmaken en beginnen
+
+
+	inc	IX		;(!) 
+	LD	DE,level_0+(22*58);-1	;eind
+	LD	BC,58*22+256-1	;-256 zodat je C niet hoeft te checken bij een DEC 
+	
+lz77_loop_1	;aantal loops=58*22-1 (tile)
+	push	bc
+	 push	de	;gebruikt om te checken of het eind is bereikt
+;aantal "backtrackiteraties" berekenen, dat is dus 255, met underflow detectie
+;HL-begin 
+	  push ix\ pop hl
+	  LD	DE,level_0
+	  or	a
+	  sbc	hl,de
+	  xor	a
+	  or	h
+	  jr	Z,lzzzz
+	  LD	L,255
+lzzzz
+	  LD	B,L
+;aantal backtrackiteraties zit nu in B
+
+;"stringlengteloop" maken
+	  LD	A,36	;32+4, min grootte is 5
+LZ77_loop_2
+	  push	bc
+	   push	AF	;lengte v string
+	  
+;backtrackloop maken
+	    push	ix\ pop	de ;verplaats pointer naar DE
+LZ77_loop_3
+	    dec	de	;pointer naar positie waar hij de string vergelijkt
+	    push	bc	;b=backtrackiteraties
+	   
+	     push	IX	;string pointer 1, real
+	      push	DE	;string pointer 2, irrational
+	      
+	       LD	B,A	;b= aantal loops
+	       LD	C,A	;C= stringlengte
+	       
+	       CALL	cpstr
+	       jp	z,break	;als b==0 dan is er een string gevonden
+			;en dumpt hij info op het scherm
+	       
+	       Ld	A,C	;stringlengte oplslaan
+	      pop	DE	;loopcounter e.d. verlagen, en loopen die hap
+	     pop	IX
+	  
+	    pop	bc
+	    djnz	LZ77_loop_3	;BT loop
+	  
+	   pop	AF
+	  pop	bc
+	  dec	A
+	  cp	4	;alles onder de 3 is verspilling
+	  jr	nz,lz77_loop_2	;stringlengteloop
+	  
+	  
+	call	no_string_found	;add byte naar hex-string, en verhoog (bytecounter) met 1
+
+	  
+breakret:	;jump hier om vars te updaten en naar de volgende tile te gaan, let op "no_str_found"
+
+	 pop	de	;eind
+	pop	BC	
+	
+	
+	inc	ix	;pointer updaten ...
+	push	ix\ pop	hl
+	or	a
+	sbc	hl,de
+	add	hl,de
+	jr	c,lz77_loop_1	
+	
+	or	a
+	sbc	hl,de
+	
+	LD	HL,(bytecounter)
+	call	dispHL
+	LD	HL,(stringcounter)
+	LD	H,0
+	call	dispHL2
+	
+	di\ im 1\ bcall(_getkey)\ ei
+	ret
+	
+;#########################################################################################
+;#########################################################################################
+;#########################################################################################
+
+break:	;dumpen: $FF, BT, lengt, naar de hex string
+	;updaten: bytecounter met 3
+	;BT = IX - de stack
+
+	LD	DE,(bytecounter)	;fuck die bytes
+	LD	HL,(bytecounter)
+	inc hl\	inc HL\	inc HL 
+	LD	(bytecounter),HL
+	
+	LD	hl,(imathptr2)
+	add	hl,de
+	LD	DE,6000
+	add	hl,de
+	
+	LD	(HL),$30	;wis dit en gebruik $FF
+	inc	hl
+	
+	LD	B,H
+	LD	A,L
+	
+	;stack: pointer naar BT pointer
+	;berekenen met (IX-stk)
+	 pop	de
+	 pop	hl
+	 push	hl
+	 push	de
+	 or	a
+	 sbc	hl,de
+	 ex	de,hl
+	
+	LD	H,B
+	LD	L,A
+	
+	LD	(HL),e
+	inc	hl
+;nu lengte berekenen, zit ergens op de stack
+;achter <s>2</s> 3 andere belangrijke waarden, om precies te zijn...
+;hl mag je dus niet aanraken >.>
+;BC kun je beter ook vanaf blijven...
+	pop 	af
+	pop 	ix
+	pop	iy
+	pop 	de
+	push 	de
+	push	iy
+	LD	IY,flags
+	push 	ix
+	push	af
+	LD	A,D
+	LD	D,-5
+	add	A,D
+	LD	(HL),A 
+	;LD	(HL),$31
+	
+;en klaar, nu debug troep outputten naar t scherm
+
+
+
+	LD	HL,0
+	LD	(curRow),HL
+	LD	HL,text
+	call	puts	;dumpt text
+	
+	LD	HL,currow
+	dec	(HL)\ dec (HL)
+	LD	A,3
+	inc	hl
+	LD	(HL),A
+	pop	de
+	ex 	de,hl
+	LD	DE,-level_0
+	add	hl,de
+	call	disphl2	;dumpt de pointer
+	
+	LD	HL,currow
+	inc	(HL)
+	LD	A,3
+	inc	hl
+	LD	(HL),A
+	pop	hl\ push hl\ pop ix
+	LD	DE,-level_0
+	add	hl,de
+	call	disphl2	;dumpt IX
+	
+	pop	hl ;BC	;backtrackiteratie counter
+	
+	LD	HL,currow
+	inc	(HL)
+	LD	A,3
+	inc	hl
+	LD	(HL),A
+	pop	HL
+	LD	L,H
+	xor	a
+	LD	H,a
+	call	disphl2	;dumpt lengte
+	
+	pop	hl ;BC	;backtrackiteratie backup
+	
+	;di\ im 1\ bcall(_getkey)\ im 2\ ei
+	
+	LD	B,0
+	add	IX,BC
+	dec	IX	;bugfix
+	
+	LD	HL,stringcounter
+	inc	(HL)
+	
+	jp breakret
+	
+	
+no_string_found:	;add een tile, pointer naar array is IX
+		;pointer naar str1 berekenen
+	LD	De,(imathptr2)		;get string base..
+	LD	HL,6000		
+	add	hl,de		;add index
+	LD	DE,(bytecounter)
+	add	hl,de		;add size
+	LD	A,(IX)
+	LD	(HL),A		;store on that location
+	
+	LD	HL,(bytecounter)	;and increment size
+	inc	hl
+	LD	(bytecounter),HL
+	ret
+
+
+
+	
+create_string:	;maakt een string var, str1 aan, grootte "stringsize" zie 1 regel omhoog
+	;pointer naar string zit in (imathprt2)
+	LD	HL,stringvar
+	LD	De,op1
+	LD	BC,9
+	LDIR
+	LD	HL,stringsize	;size, let op geen controle voor genoeg RAM
+	bcall(_CreateStrng)
+	
+	ex	de,hl
+	LD	A,stringsize%256	;size bytes
+	LD	(HL),A
+	inc	hl
+	LD	A,stringsize/256
+	LD	(HL),A
+	inc	HL
+	Ld	(imathptr2),HL
+	LD	A,$1A
+	LD	(HL),A
+	ret
+
+
+	
+convert_to_string	;converteert string in memory naar .db, hopelijk..
+		
+	LD	de,(imathptr2)
+	LD	hl,3*2000		
+	add	hl,DE
+	push	HL	;stack = pointer naar allereerste byte byte van de niet-vertaalde string
+
+	push	DE	;pointer naar begin str1
+	
+	pop	ix	;IX = pointer naar begin str1, aka bestemming
+	pop	HL	;HL = pointer naar de niet vertaalde bron
+
+	LD	(ix),'.'
+	LD	(IX+1),'d'
+	LD	(IX+2),'b'
+	Ld	(IX+3),' '
+	
+	LD	DE,4
+	add	ix,de
+	
+	LD	BC,2000
+convert_to_string_loop
+
+	LD	(IX),','\ inc ix
+	Ld	(IX),'$'\ inc ix
+	
+	LD	A,(HL)
+	and	%00001111
+	cp	$A
+	jr	C,number
+getal:	;A-F
+	add	A,$40-9-$30
+number:	;0-9
+	add	A,$30
+	LD	(IX+1),A	;mSB klaar
+	
+	LD	A,(HL)
+	rra\ rra\ rra\ rra
+	and	%00001111
+	cp	$A
+	jr	C,number2
+;A-F
+	add	A,$40-9-$30
+number2:	;0-9
+	add	A,$30
+	LD	(IX),A	;MSB klaar
+	
+	inc 	ix
+	inc	ix
+
+	inc	hl
+	
+	dec	BC
+	LD	A,C
+	or	B
+	jr	nz,convert_to_string_loop
+;nu .db - nogwat toevoegen 
+	ret
+	
+	
+stringvar:
+.db 	StrngObj,tVarStrng,tstr1,$0,0,0,0,0,0
+
+string:	
+.db 	".db $00,"
+
+
+	
+;) = spatie, : = punt, + = komma
+;
+text:
+.db	"string found    "
+.db	"DE:             "
+.db	"IX:             "
+.db	"LE:",0
+
+putS:
+	di\ im 1
+	ld a,(hl)
+	or a
+	jr z,puts2	
+	bcall(_PutC)
+	inc	hl
+	jr PutS+2
+puts2
+	ret
+ 
+ 
+dispA:
+	push	af
+	push	hl
+	LD	L,A
+	LD	H,0
+	call disphl
+	pop	hl
+	pop	af
+	ret
+	
+dispDE:
+	ex de,hl
+	call disphl
+	ex de,hl
+	ret
+
+dispHL		;delete dit bij de beta...
+	di
+	im 1
+	push	DE
+	push	BC
+	push	AF
+	push	HL
+	LD	HL,0
+	LD	(currow),HL
+	pop	HL
+	push	HL
+	BCALL(_dispHL)
+	BCALL(_getkey)
+	pop	hL
+	pop	af
+	pop	bc	
+	pop	de
+	;im 2
+	ei
+	ret
+	
+dispHL2		;delete dit bij de beta...
+	di
+	im 1
+	push	DE
+	push	BC
+	push	AF
+	push	HL
+	BCALL(_dispHL)
+	;BCALL(_getkey)
+	pop	hL
+	pop	af
+	pop	bc	
+	pop	de
+	;im 2
+	;ei
+	ret 
+ 
+validate();	
+	

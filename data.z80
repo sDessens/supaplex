@@ -1,0 +1,204 @@
+level_names: .db 0,"WARM;UP",0
+.db "EXIT@",0
+.db "STONE=AGE",0
+.db "COLLECTOR",0
+.db "EASY;DEAL",0
+.db "DOWN;THEY;FALL@",0
+.db "GO;THROUGH@",0
+.db "GET;THOSE;TOO@@",0
+.db "BUG;FUNNY",0
+.db "EASY;GO@",0	;<----
+.db "RUN;FOR;LIFE",0
+.db "IGNORE;THEM",0
+.db "ANONYMOUS",0
+.db "FALL;OUT@",0
+.db "ONE;THING>>>",0
+.db "JUST;DO;IT@",0
+.db "BANG@",0
+.db "QUICKY@",0
+.db "CRAZY;HARRY",0
+.db "MINOTAURUS",0
+.db "GRAVITY",0
+.db "UP;AND;DOWN",0
+.db "BOMB;TIME",0
+.db "200;OBJECTS",0
+.db "YAWN@",0
+.db "ONE",0
+.db "ONCE;AGAIN",0
+.db "BABAS;WORK",0
+.db "TNT",0
+.db "NO;PROBLEM@",0
+.db "TIME;TO;OPEN@",0
+.db "EASY;BUSINESS",0
+.db "INSIDE=OUTSIDE",0
+.db "EASY;RIDER@",0
+.db "NO;MIRACLE@",0
+.db "PUSH@",0
+.db "NEARLY;BORING",0
+.db "BOMBASTIC",0
+.db "SIMPLE@",0
+.db "MIND;THE;STONES@",0
+.db "TIME=RUNNER",0
+.db "LITTLE=PLEASURE",0
+.db "ANTI=CLOCKWISE@",0
+.db "TELEPATHY",0
+.db "EASY;WORK",0
+.db "CHAMBER=MUSIC",0
+.db "LOOKS;DIFFICULT",0
+.db "READY=STEADY=GO",0
+.db "FALL=FESTIVAL",0
+.db "DONT;WORRY@@",0
+.db "STATE;OF;MIND",0
+.db "DO;IT;YOURSELF@",0
+.db "FILL;IN",0
+.db "CORNER;CONFUSION",0
+.db "THE;ELDRITCH",0
+.db "KEEP;COOL@@",0
+.db "THOSE;WE;LIKE@@",0
+.db "ALL;TOGETHER",0
+.db "VICE=",0
+.db "VERSA",0
+.db "PRE=IGNITION@",0
+.db "GUMBO",0
+.db "PHILS;FIRST@",0
+.db "THERE;YOU;GO",0
+.db "PATHFINDER@",0
+.db "ISLAND;HOPPER",0
+.db "GET;THEM;OUT@",0
+.db "TOUGH;GOING",0
+.db "HORRY;UP@",0
+.db "BARELY;POSSIBLE@",0 ;<----
+.db "HEAD=HUNTER",0
+.db "COMMUNITY WORK@",0
+.db "ONE;WAY",0
+.db "INSPIN;OUTSPIN@",0
+.db "NICE",0
+.db "ALL;THE;FAMILY@",0
+.db "LITTLE;DETAIL",0
+.db "TRANSPORT;IT@",0
+.db "DANT;WASTE;THEM",0
+.db "ENTERTAIMENT",0	;<---
+.db "DIAGONAL@",0
+.db "TIME;IS;INFO",0
+.db "FUN;TASTIC",0
+.db "ALL;THAT;FUSS",0
+.db "A;PROS;WORK@",0
+.db "CRASH",0
+.db "SEE;YOU;TOMORROW@",0	;<--
+.db "FLIP;AND;FLOP",0
+.db "TRIPLE;FORK",0
+.db "KNOW;THAT;?",0
+.db "VOYAGER;III",0
+.db "CHEESE;SANDWICH",0	;<---
+.db "TIMING@",0
+.db "EINSTEINS;FAV",0
+.db "GOOD;LUCK",0
+.db "CRACKER",0
+.db "GOOD;JOB@",0
+.db "MIXED;SALAD",0
+.db "JOYSTICK;HANDLING",0	;<--
+.db "IQ@",0
+.db "ON=OFF@",0
+.db "SUB=EFFECTS",0
+.db "KNOW=HOW",0
+.db "CHAOS",0
+.db "ONES;MISSING",0
+.db "WATCH;OUT@@",0
+.db "FIND;THE;WAY",0
+.db "SADISM@",0
+.db "UP;AND;DOWNSTAIRS",0	;<----
+.db "TROUBLE;AHEAD",0
+.db "BRAINMAN@",0
+ 
+find_n_level:	;input A, level nummer
+	LD	HL,level_names
+	LD	D,A
+	LD	A,0
+find_n_level_loop:
+	ld	b,30
+	cpir
+	dec	D
+	jr	nz,find_n_level_loop
+	ret
+ 
+interrupt:
+	di
+	exx
+	ex 	af,af'
+	
+
+	ld   a,%00000000	;%00000110	$06	
+	out   (4),a	;set 500 mhz interupt speed	(weet geen betere plek, is toch maar ~10k clocks)
+	ld   a,$08
+	out   (3),a
+	ld   a,$0A
+	out   (3),a 
+	
+	LD	HL,interrupt_counter
+	inc	(HL)
+
+	ex 	af,af'
+	exx
+	ei
+	ret
+
+data_start:
+relocate(dataRAM)
+data_start_2:
+;"temp" is wat je ZIET
+;de rest is de eigelijke coordinaten, waar hij naartoe scrollt/beweegt
+; een monsterlijke hoeveelheid vars... lang leve asm xD
+X_begin		.db	x_start
+Y_begin:	.db	Y_start
+
+X_scroll_temp:	.dw	0;X_begin*8-42-104	
+X_scroll:	.dw	0;X_begin*8-42			;hier moeten minimum waardes aan vast zitten
+X_scroll_max:	.dw	(tilemap_breedte-12)*8-3
+
+Y_scroll_temp:	.dw	0;Y_begin*8-28
+Y_scroll:	.dw	0;Y_begin*8-28
+Y_scroll_max:	.dw	(tilemap_hoogte-10)*8-4
+
+X_pos:		.dw	X_begin*8	;verwarrend he... 6 x-coordinaten?
+X_pos_temp:	.dw	X_begin*8
+X_pos_previous:	.dw	X_begin*8
+Y_pos:		.dw	Y_begin*8
+Y_pos_temp:	.dw	Y_begin*8
+Y_pos_previous	.dw	Y_begin*8
+
+bitmask:	.db	255	;%11100000, bijvoorbeeld...
+frame:	.db	0
+appvar_adress:	.dw	0
+infotrons:	.db	0
+infotrons_needed: .db	0
+menu:	.db	8	;0 voor niet actief, 8 voor actief
+menu_temp:	.db	0
+item_amount	.db	0
+explosies:	.db	0
+death:	.db	0
+sprite:	.db	0
+ai_amount:	.db	0	;data is genest op $8000
+delay_time:	.db	0
+interrupt_counter: .db	0
+push:	.db	0
+knipoog_coord:	.dw	0
+menu2:	.db	8
+menu2_temp	.db	0
+
+batterij:	.db	0
+batterijframe:	.db	255
+batterij_flag:	.db	0
+x_pos_batterij:	.dw	0
+y_pos_batterij:	.dw	0
+batterij_timer:	.db	0
+
+data_end:
+current_level:	.db	0
+	
+menulocation:	.db	5	;min 1 max.. 105?
+	.db	5	;min 0 max 7
+
+	;
+
+;data_end:
+endrelocate()

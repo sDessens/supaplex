@@ -1,0 +1,740 @@
+;DE=X
+;HL=Y
+gettile_8:
+	srl	D\ rr	E
+	srl	D\ rr	E
+	srl	D\ rr	E
+	srl	H\ rr	L
+	srl	H\ rr	L
+	srl	H\ rr	L
+gettile:
+	LD	H,0
+	LD	D,H
+	ADD	HL,HL	;2
+	LD	B,H
+	LD	C,L
+	ADD	HL,HL	;4
+	ADD	HL,HL	;8
+	ADD	HL,HL	;16
+	ADD	HL,HL	;32
+	sbc	HL,BC	;30
+	ADD	HL,HL	;60
+	
+	ADD	HL,DE	;62
+	LD	de,(iMathPtr1)
+	ADD	HL,DE
+	RET
+	
+HL_times_mapwidth
+	push	DE
+	ADD	HL,HL	;2
+	LD	D,H
+	LD	E,L
+	ADD	HL,HL	;4
+	ADD	HL,HL	;8
+	ADD	HL,HL	;16
+	ADD	HL,HL	;32
+	or	A
+	sbc	HL,DE	;62
+	ADD	HL,HL	;64
+	
+	pop	DE
+	RET
+	
+erase_tile:		;wist de tile achter je, en zorgt ook dat de pipen niet gewist worden
+	LD	A,(frame)
+	AND	%00000111
+	cp	0
+	ret	Nz
+	
+	xor	a
+	
+	LD	HL,(x_pos_previous)
+	LD	DE,(x_pos)
+	or	a
+	sbc	HL,DE	;zero flag geset als ze gelijk zijn
+	JR	Z,zero
+	inc	a
+zero:
+			
+	LD	HL,(y_pos_previous)
+	LD	DE,(y_pos)
+	or	a
+	sbc	HL,DE	;zero flag geset als ze gelijk zijn
+	jr	Z,zero2
+	inc	a
+zero2:
+	;a bevat nu: 0 als je moet RET'en
+	or	a
+	ret	Z
+		
+		
+	LD	DE,(X_pos_previous)	;haalt de vorige "1" weg..
+	LD	HL,(Y_pos_previous)
+	CALL	gettile_8
+	LD	A,(HL)
+;alleen wissen als het geen pijp is, dus 6,7,8,9 ,10,11 ,12
+
+	sub	6
+	cp	8
+	jr	c,pipe 	;6<x<13
+	
+	xor	a
+	LD	(HL),A	;schrijft een 0'tje naar vorige positie
+pipe:
+	
+	LD	DE,(X_pos_temp)		;pak nieuwe coordinaten
+	LD	(X_pos_previous),DE
+	LD	HL,(Y_pos_temp)
+	LD	(Y_pos_previous),HL
+	
+	CALL	gettile_8	
+	LD	A,(HL)	
+	CALL	tile_action
+	
+	CP	6	;pipe check..	
+	JR	NC,create_pipe
+		
+	LD	A,1	;gooi een 1 in het vakje waar je staat
+	LD	(HL),A
+	RET
+	
+create_pipe:	
+	LD	DE,(X_pos_previous)	;maakt een nieuw "pipe" item aan, zorgt ervoor dat ie niet gewist word	
+	LD	HL,(Y_pos_previous)
+	LD	B,A
+	LD	A,4
+	CALL	create_item
+	RET
+	
+
+tile_action:	
+		;mogelijke waarden: 
+		;0, niets
+		;1, groen
+		;2, infotron
+		;16, bom
+	cp	2
+	JR	Z,tile_infotron
+	CP	1
+	JR	Z,tile_green
+	cp	16
+	jr	z,tile_batterij
+	RET
+	
+tile_batterij:
+	push	af
+	push	hl
+	call	add_batterij
+	pop	hl
+	pop	af
+	ret
+	
+tile_infotron:
+	push	af
+	LD	A,(infotrons)
+	sub	1	;dec a wont trigger carry
+	ADC	A,0	;oftwel a-1+(a=0) ;)
+	LD	(infotrons),A
+	push	hl
+	push	de
+	CALL	display_infotrons
+	pop	de
+	pop	hl
+	pop	af
+tile_green
+	RET
+	
+is_tile_eraseable:
+	LD	A,(HL)
+	or	a\	ret	z
+	CP	1\	ret	z
+	CP	2\	ret	z
+	;cp	16\	ret	z
+	ret
+	
+is_tile_walkable	;word gecalls elke keer als je beweegt om te kijken of je er wel/niet kan lopen
+			;triggert ook het endgame event
+	LD	A,(HL)
+	CP	20
+	JR	z,end_block
+	cp	13
+	jr	z,terminal
+	
+	
+	cp	16	;batterij
+	ret	z
+	CP	0	;niets
+	ret	Z
+	cp	1	;groen
+	ret	Z
+	cp	2	;infotron
+	ret	z
+	cp	B	;b=pijp... input
+	ret	z
+	CP	12	;pijp = 6-12
+	ret	Z
+	;als B 6 of 8 is, dan kan je door 10 heen
+	;als B 7 of 9 is, dan kan je door 11 heen
+	cp	8
+	jr	z,exit_nz
+	cp	9
+	jr	z,exit_nz
+	
+	sub 	2
+	cp	b	;check 8/10 of 9/11; werkt niet!
+	RET	Z	
+	sub	2
+	cp	B	;check 6/10 of 7/11
+	ret	Z
+	ret
+	
+exit_nz:
+	or	a
+	ret
+	
+end_block:
+	LD	A,(infotrons)
+	or	a
+	JR	z,win_level
+	RET
+	
+terminal:
+	call	terminal_scan
+	LD	A,1
+	or	a	;set zero flag
+	RET
+	
+win_level:	;de volgende code zorgt ervoor dat je zonder stack mankementen terugkeer naar het mainscreen
+		;en het updaten van de highscore
+	pop	HL	
+	pop	hl
+	pop	hl
+	ret
+	
+pipe_check:
+	;kijk of je naar een pipe toegaat, zoja, doe het volgende:
+	;ga er doorheen
+	;of kap af
+	;misschien maak ik hem later zo dat je pijpen kan "chainen"
+	LD	A,(frame)
+	and	%00000111
+	RET	NZ
+	
+	LD	HL,(Y_pos)
+	LD	DE,(X_pos)
+	CALL	gettile_8
+	LD	A,(HL)
+	CP	6	;check 6 of hoger
+	RET	C
+	CP	13	;check 13 of lager
+	RET	NC
+	
+	;je zit in een pijp dus coordinaten updaten:
+	LD	HL,(Y_pos)	;\ 
+	LD	DE,(Y_pos_temp)	; \ 
+	or	a		;  \ 
+	sbc	hl,de		;   \ 
+	LD	DE,(y_pos)	;    \ 
+	add	HL,DE		;     \ 
+	ex	DE,HL		;DE=new Ypos
+	
+	LD	HL,(X_pos)	;\ 
+	LD	BC,(X_pos_temp)	; \ 
+	or	a		;  \ 
+	sbc	hl,bc		;   \ 
+	LD	bc,(X_pos)	;    \ 
+	add	HL,bc		;     \ 
+	ex	DE,HL		;DE=new Xpos, HL=Ypos
+	
+	push	HL
+	 push	DE
+	  CALL	gettile_8
+	  LD	A,(HL)
+	  or	a		;check of er iets achter zit
+	 pop	DE
+	pop	HL
+	JR	Z,go_trough
+	
+	LD	DE,(X_pos_temp)
+	LD	HL,(Y_pos_temp)	;coordinaten herstellen	
+go_trough:
+	LD	(Y_pos),HL
+	LD	(X_pos),DE
+	RET
+	
+	
+	
+knipoog:	;als je goed kijkt bij het echte spel knipoogt hij...
+		;wat het doet: een nulletje schrijven naar (HL), als de tile "walkable" is..
+		;met b=0
+	CALL	gettile_8
+	;LD	B,0
+	;CALL	is_tile_eraseable
+	LD	A,(HL)
+	cp	1
+	jr	z,oog
+	cp	16
+	jr	z,oog
+	cp	2
+	scf\ ccf\ ret nz
+oog:
+	CALL	tile_action
+	LD	(knipoog_coord),HL
+	;LD	(HL),0	
+	
+	scf		;set carry flag
+	RET
+	
+erase_tile_2:	;maakt een itempje aan met tile "0" en beweging 4
+	LD	B,0	;de tile
+	LD	A,4	;de beweging
+	CALL	create_item
+	RET
+	
+verwijder_knipoog:
+	LD	HL,(knipoog_coord)
+	xor	a
+	or	l
+	or	h
+	ret	z
+	LD	(HL),A
+	LD	HL,0
+	LD	(knipoog_coord),HL
+	ret
+	
+	
+disc_push_up:
+;HL= tilemap adr.
+	LD	A,(HL)
+	cp	14
+	ret	nz
+
+	LD	De,-tilemap_breedte
+	add	hl,de	
+	LD	A,(HL)
+	or	A
+	ret	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+		
+	sbc	hl,de
+	xor	a
+	LD	(HL),A
+	
+	LD	DE,(X_POS)
+	LD	HL,(Y_pos)
+	LD	BC,-8
+	add	hl,bc
+	
+	LD	B,14	
+	LD	A,3	;and this
+	push	hl	;and this
+	call 	create_item
+	POP	hl
+	LD	(Y_pos),hl
+	ret	
+	
+disc_push_down:
+;HL= tilemap adr.
+	LD	A,(HL)
+	cp	14
+	ret	nz
+	
+	call	push_check
+
+	LD	De,tilemap_breedte
+	add	hl,de	;chance this
+	LD	A,(HL)
+	or	A
+	ret	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+	
+	sbc	hl,de
+	xor	a
+	LD	(HL),A
+	
+	LD	DE,(X_POS)
+	LD	HL,(Y_pos)
+	LD	BC,8
+	add	hl,bc
+	
+	LD	B,14	
+	LD	A,0	;and this
+	push	hl	;and this
+	call 	create_item
+	POP	hl
+	LD	(Y_pos),hl
+	ret	
+	
+disc_push_right:
+;HL= tilemap adr.
+	call	push_check
+
+	inc	hl	
+	LD	A,(HL)
+	or	A
+	ret	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+	
+	dec	hl
+	xor	a
+	LD	(HL),A
+	
+	LD	HL,(X_POS)
+	LD	DE,8	
+	ADD	HL,DE
+	EX	de,hl
+	LD	HL,(Y_pos)
+	
+	LD	B,14	
+	LD	A,2	
+	push	DE	
+	call 	create_item
+	POP	DE
+	LD	(X_pos),DE
+	ret
+	
+	
+disc_push_left:
+;HL= tilemap adr.
+	call	push_check
+	
+	dec	hl	
+	LD	A,(HL)
+	or	A
+	ret	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+	
+	inc	hl
+	xor	a
+	LD	(HL),A
+	
+	LD	HL,(X_POS)
+	LD	DE,-8	
+	ADD	HL,DE
+	EX	de,hl
+	LD	HL,(Y_pos)
+	
+	LD	B,14	
+	LD	A,1	
+	push	DE	
+	call 	create_item
+	POP	DE
+	LD	(X_pos),DE
+	ret	
+	
+	
+push_block_right:	;op dit moment: hl=tile
+	
+	LD	A,(HL)
+	CP	3	;(een blokje...)	;uiteindelijk ook discs..
+	jr	z,right_push
+	cp	15	;lp
+	jr	z,right_push
+	cp	14	;disc
+	jr	z,disc_push_right
+	ret	nz	
+right_push
+	call	push_check
+
+	LD	B,A
+
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	RET	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+	
+	LD	DE,tilemap_breedte-1
+	add	HL,de
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	SBC	HL,DE
+	
+	
+;nu word de blokje weggeduwd, haal de coordinaten op, en maak een itempje aan
+	
+
+	dec	HL
+	xor	a
+	LD	(HL),A
+
+	LD	HL,(X_POS)
+	LD	DE,8
+	ADD	HL,DE
+	
+	EX	de,hl
+	LD	HL,(Y_pos)
+	
+	;LD	B,3	;tile
+	LD	A,2	;beweging
+	push	HL
+	push	DE
+	CALL	create_item
+	pop	DE
+	pop	HL
+	LD	(X_pos),DE
+	RET
+	
+push_block_left:	;op dit moment: hl=tile
+	LD	A,(HL)
+	CP	3	;(een blokje...)	;uiteindelijk ook discs..
+	jr	z,left_push
+	cp	15	;lp
+	jr	z,left_push
+	cp	14
+	call	z,disc_push_left
+	ret	nz	
+left_push
+	call	push_check
+
+	LD	B,A
+	
+	dec	HL
+	LD	A,(HL)
+	OR	A
+	RET	NZ
+	LD	A,explosie_tile
+	LD	(HL),A
+	
+	LD	DE,tilemap_breedte+1
+	add	HL,de
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	SBC	HL,DE
+	
+;nu word de blokje weggeduwd, haal de coordinaten op, en maak een itempje aan
+	inc	HL
+	xor	a
+	LD	(HL),A
+
+	LD	HL,(X_POS)
+	LD	DE,-8
+	ADD	HL,DE
+	
+	EX	de,hl
+	LD	HL,(Y_pos)
+	
+	;LD	B,3	;tile
+	LD	A,1	;beweging
+	push	HL
+	push	DE
+	CALL	create_item
+	pop	DE
+	pop	HL
+	
+	LD	(X_pos),DE
+	RET
+	
+dec_push:
+	LD	A,(frame)
+	and	7
+	ret	nz
+	Ld	A,(push)
+	or	a
+	ret	z
+	dec	a
+	LD	(push),A
+	ret
+	
+push_check:
+	push	af
+	LD	A,(push)
+	or	a
+	jr	nz,flagged
+	LD	a,2
+	LD	(push),A
+	pop	af
+	pop	af
+	ret
+flagged:		;als uie al geflagd was:
+	inc	a
+	LD	(push),A
+	pop	af
+	ret
+	
+	
+	
+fall_tiles:	;deze routine is een hel om te maken... de ergste uit dit spel..
+	LD	A,(frame)
+	AND	%00000111
+	RET	NZ
+
+	LD	IX,(imathptr1)
+	LD	DE,tilemap_breedte+1
+	ADD	IX,DE
+	
+	LD	HL,8	;de x en y coords..
+	LD	DE,1
+	
+	LD	B,22
+move_tiles_loop_Y
+	push	BC
+	
+	LD	B,tilemap_breedte-2
+move_tiles_loop_x
+	LD	A,(IX)
+	cp	2	;infotron
+	JR	Z,match
+	cp	3	;stone
+	JR	Z,match
+	cp	15
+	JR	Z,match_LP	;LP? ja, het lijkt op een lp-plaat..
+move_tiles_loop_end:	
+	inc	DE
+	inc	IX
+	DJNZ	move_tiles_loop_X
+	inc	IX
+	inc	IX
+	LD	DE,8
+	ADD	HL,DE
+	LD	DE,1	;moet je maal 8 doen.
+	pop	BC
+	DJNZ	move_tiles_loop_Y
+	RET
+	
+match_LP:
+	LD	A,(IX+tilemap_breedte)
+	or	a
+	jr	NZ,move_tiles_loop_end
+	push	de
+	push	hl
+	push	bc
+	LD	B,15	;tile
+	LD	A,0	;beweging
+	ex	de,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ex	de,hl	
+	CALL	create_item
+	pop	bc
+	pop	hl
+	pop	de
+	LD	(IX),0
+	LD	(IX+tilemap_breedte),4
+	jr	move_tiles_loop_end
+	
+match:	;tiles vallen naar beneden OF naar de zijkant
+	LD	C,A		;de tile!
+	LD	A,(IX+tilemap_breedte)
+	or	a
+	JR	NZ,fail 
+	LD	A,C
+	LD	(IX),0
+	LD	(IX+tilemap_breedte),4
+;nu gaan we een item aanmaken:
+; de x en y positie van de tile in DE en HL (hl=y..)
+; A, de beweging
+; B, de tile	vrijwel altijd een 2 of 3
+; op dit moment zit de x pos in DE
+; de y pos in HL
+	push	DE
+	push	HL
+	push	BC
+	
+	LD	B,C	;de tile
+	LD	A,0	;naar beneden..
+	ex	DE,HL	;hl=x, de=y
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ex	de,hl	;HL = y, DE = X, werkt!
+
+	call	create_item	;HL=y DE=X A=beweging B=tile
+	
+	pop	BC
+	pop	HL
+	pop	DE
+		
+	xor	A
+	LD	(IX),A	
+	JR	move_tiles_loop_end
+	
+fail:	;tiles vallen naar de zijkant, links eerst!
+;c = tile
+;a = tile onder je..
+	;JR	move_tiles_loop_end
+	
+	
+	CP	5			;!	
+	JR	NC,move_tiles_loop_end	;ret als het geen 0,1,2,3 is
+	CP	1
+	JP	Z,move_tiles_loop_end	;ret als het een 1 is.. een 0 is niet mogelijk
+	
+	LD	A,(IX-1)
+	or	a
+	JR	NZ,fail_2
+	LD	A,(IX-1+tilemap_breedte)
+	or	a
+	JR	NZ,fail_2
+;als de code hier komt, dan valt het blokje naar links..
+	
+	push	DE
+	push	HL
+	push	BC
+	
+	LD	B,C	;de tile
+	LD	A,1	;naar links..
+	ex	DE,HL	;hl=x, de=y
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ex	de,hl	;HL = y, DE = X, werkt!
+
+	call	create_item	;HL=y DE=X A=beweging B=tile
+	
+	pop	BC
+	pop	HL
+	pop	DE
+	
+	LD	(IX-1),4
+	xor	A
+	LD	(IX),A	
+	
+	Jp	move_tiles_loop_end
+	
+fail_2
+	LD	A,(IX+1)
+	or	a
+	JP	NZ,move_tiles_loop_end
+	LD	A,(IX+1+tilemap_breedte)
+	or	a
+	JP	NZ,move_tiles_loop_end
+;als de code hier komt, dan valt het blokje naar links..
+	
+	push	DE
+	push	HL
+	push	BC
+	
+	LD	B,C	;de tile
+	LD	A,2	;naar links..
+	ex	DE,HL	;hl=x, de=y
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ex	de,hl	;HL = y, DE = X, werkt!
+
+	call	create_item	;HL=y DE=X A=beweging B=tile
+	
+	pop	BC
+	pop	HL
+	pop	DE
+	
+	LD	(IX+1),4
+	xor	A
+	LD	(IX),A	
+	
+	Jp	move_tiles_loop_end
+	
+	
+	
+	
+	

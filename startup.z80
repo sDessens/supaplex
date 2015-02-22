@@ -1,0 +1,503 @@
+game_start:
+	bcall(_RunIndicOff)
+	;call 	get_appvar		;versplaatst de appvar naar RAM, en maakt deze zonodig aan
+	call	fetch_tilemap_mem	;maakt 1.5k ram aan voor de tilemap, (imathptr1)
+	call	get_grbuf		;breid het buffer uit naar 10*14
+	call 	load_title_screen	;displays het titelscherm, zodat je iets hebt om naar te staren...
+	call	fastcopy
+
+_	bcall(_GetCSC)
+	CP	0
+	jr	z,-_	;wait untill key is pressed
+	
+	call	setup_interrupt
+
+	
+	LD	hl,0
+	LD	(menulocation),hl
+	call	menu_fade
+	LD	Bc,(menulocation)
+	call	menu_main
+	
+	
+quit_app:	;stack in acht nemen!
+	ld   a,%00000110	
+	out   (4),a	;fix interrupt speed
+	IM 1
+
+;errtilemap:
+	;LD	DE,tilemap
+	;LD	HL,tilemapsize
+	;BCALL(_delmem)
+		
+	
+; errappvar:	;klooit alleen met de appvar
+	; LD	HL,AppVarName 
+	; rst	20h	;mov9toOP1
+	; BCALL(_chkfindsym)
+	; LD	A,B
+	; or	A
+	; JR	NZ,arcived
+	; LD	HL,AppVarName 
+	; rst	20h
+	; bcall(_ARC_UNARC)
+; arcived:
+	POP	HL
+	LD	de,grbuf+(64*12)
+	LD	hl,graphram
+	LD	BC,352
+	LDIR
+	bjump(_JForceCmdNoChar)
+	
+	
+	
+level_start:
+	call	initalize_data		;versplaatst scrollerdata naar RAM
+	
+	call	move_compressed_to_grbuf
+	call	decompress_main
+
+	call	menu_paint_full
+	
+	call	clear_menu		;wis menuram
+	call	draw_menu_line		;tekent de lijnen in het menu + level nummer en naam
+	call	get_starting_position
+	call	calucate_starting_position	;berekent X_begin en Y_begin, plus de tilemap coords
+	CALL	initalize_AI
+	call	initalize_infotrons	;lijkt me vrij duidelijk...
+	CALL	display_infotrons
+	CALL	display_batterij
+ ;im 1\ bcall(_getkey)	
+	CALL	scroll_in
+	call	put_box
+	ei\ im 2
+	ret
+
+setcontrast:
+;input: a number from 0 to 39
+	cp	40
+	ret	nc
+	push	af
+	 add	a,$D8
+	 push	hl
+	  inc	hl
+	  dec	hl
+	 pop	hl
+	 out	(10h),a 
+	pop	af
+	ret
+	
+	
+fade_out:
+	LD	A,(contrast)
+	LD	C,8
+	jr	fade
+fade_in:
+	LD	A,(contrast)
+	LD	C,A
+	LD	A,8
+		
+fade:
+	ei
+	im 2
+
+;input:	A: current comtrast
+;	C: taget contrast
+	LD	B,20
+fadeloop:
+	call	setcontrast
+	cp	c
+	ret	z
+	jr	nC,eeee
+	inc	a
+	inc	a
+eeee	dec	a
+	push	bc
+eeeee	HALT\ DJNZ eeeee
+	pop	bc
+	jr	fadeloop
+	
+
+put_box:
+	LD	HL,(y_pos)
+	LD	De,(X_pos)
+	call	gettile_8
+	LD	A,1
+	Ld	(HL),A
+	ret
+	
+setup_interrupt
+	IM	1	;uhuu...
+	
+	ld   a,$00
+	out (4),a	;set fastest interrupt speed
+	ld   a,$0A
+	out (3),a 
+	
+	LD	de,$8101
+	LD	hl,$8100
+	LD	A,H
+	LD	BC,256
+	LD	(HL),$84	;location of routine
+	ldir		;interrupt vector table ready
+	LD	I,A
+	
+	LD	DE,$8484
+	LD	HL,int_code
+	LD	BC,3
+	ldir	;interrupt ready, process IM 2 to activate	
+	ret
+int_code:
+	jp	interrupt
+	
+draw_menu_line:
+	LD	HL,menuram
+	LD	DE,menuram+1
+	LD	BC,11
+	LD	(HL),255
+	ldir
+	
+	ex	de,hl
+	
+	LD	(hl),128	;draw dot
+	LD	DE,10
+	add	HL,DE
+	LD	(HL),%01000000
+	inc	hl
+	inc	(HL)	;cheap trick
+	LD	DE,5*12+1
+	add	hl,de	
+	LD	(hl),128	
+	LD	DE,10
+	add	HL,DE
+	LD	(HL),%01000000
+	inc	hl
+	inc	(HL)	
+	
+draw_menu_number:
+	LD	A,(current_level)	;bijvoorbeeld....
+	LD	E,A
+	LD	D,0
+	LD	HL,table
+	add	hl,de
+	add	hl,de
+	add	hl,de
+	LD	A,(hL)
+	push	af
+	
+	CALL	convert_A
+	LD	IX,menuram+12+12
+	CALL	disp_hl
+	LD	HL,menuram+12+12
+	LD	B,5
+	LD	DE,11
+draw_menu_number_shift:
+	SRL	(HL)
+	inc	hl
+	RR	(HL)
+	dec	hl
+	scf
+	RR	(HL)
+	inc	hl
+	RR	(HL)
+	add	hl,de
+	djnz	draw_menu_number_shift
+	inc	hl
+	LD	DE,-24
+	ADD	HL,DE	
+	set	1,(HL)
+	ADD	HL,DE
+	set	1,(HL)
+	
+	LD	DE,menuram+12+12+1
+	pop	af
+	push	DE
+	;LD	A,(current_level)
+	call	find_n_level
+	push	hl
+	pop	ix
+	pop	de
+		
+	CALL	display_string
+	ret
+	
+	
+	
+clear_menu:	
+	LD	DE,menuram+1
+	LD	HL,menuram
+	LD	(HL),0
+	LD	BC,12*8-1
+	LDIR
+	ret
+	
+
+load_level
+	LD	HL,(imathptr1)
+	LD	D,H
+	LD	E,L
+	inc	de
+	LD	A,5
+	LD	(HL),A
+	LD	BC,60*24-1
+	ldir
+
+	LD	hl,(imathptr1)
+	LD	DE,61
+	add	hl,de
+	ex	de,hl
+	LD	HL,leveldata
+	
+	LD	A,22
+load_level_loop	
+	LD	BC,58
+	LDIR
+	inc	de
+	inc	de
+	dec	a
+	jr	nz,load_level_loop
+	
+	ret
+	
+	
+clear_grbuf:
+	LD	HL,grbuf
+	LD	DE,grbuf+1
+	LD	(HL),0
+	LD	BC,bufferend-grbuf-1
+	LDIR
+	ret
+
+initalize_data:
+	LD	DE,dataRAM
+	LD	HL,data_start
+	LD	BC,data_end-data_start_2			;26
+	LDIR
+	ret
+
+
+
+load_title_screen:
+	LD	DE,grbuf+(breedte*8)+1
+	LD	HL,title_screen
+	LD	B,64
+load_title_screen_loop:
+	push	BC
+	LDI\ LDI\ LDI\ LDI
+	LDI\ LDI\ LDI\ LDI
+	LDI\ LDI\ LDI\ LDI
+	inc	DE
+	inc	DE
+	POP	BC
+	DJNZ	load_title_screen_loop	
+	RET
+
+
+
+get_grbuf:
+	LD	HL,grbuf+(64*12)
+	LD	DE,graphRAM
+	LD	BC,352
+	LDIR
+	ret
+	
+	
+	
+initalize_AI:
+;stap linair door het level, 17'tjes verwijderen en een item ervoor in de plaats zeten
+	LD	IX,AI_ram
+	LD	HL,1
+init_ai_loop:
+	Ld	DE,1
+init_ai_loop_2
+	push	hl
+	push	de
+	call	gettile
+	LD	A,(HL)
+	cp	17
+	jp	z,add_schaar
+schaar_ret
+	pop	de
+	pop	hl
+init_schaar:	
+	inc	de
+	Ld	A,E
+	cp	59
+	jr	C,init_ai_loop_2
+	
+	inc	hl
+	Ld	A,L
+	CP	25
+	JR	C,init_ai_loop
+	
+	ret
+	
+add_schaar:
+	LD	(HL),17		;tilemap adres, hopelijk...
+	LD	A,(AI_amount)
+	cp	63
+	jr	nc,schaar_ret
+	inc	a
+	LD	(ai_amount),A
+	
+	pop	de	;X
+	pop	bc	;Y
+	push	bc
+	push	de
+		
+	sla e\ rl d	;x8
+	sla e\ rl d
+	sla e\ rl d
+	
+	sla c\ rl b
+	sla c\ rl b
+	sla c\ rl b
+	
+	LD	(IX),E\ inc ix
+	LD	(IX),D\ inc ix
+	Ld	(IX),C\ inc ix
+	LD	A,%00000111
+	LD	(IX),A\ inc ix
+	jr 	schaar_ret
+	
+get_starting_position:
+
+	LD	HL,1
+	LD	De,1
+	
+get_starting_position_loop:
+	push	de
+	push	hl
+	call	gettile
+	LD	A,(HL)
+	pop	hl
+	pop	de
+	cp	22
+	jr	z,found
+	inc	e
+	LD	A,E
+	cp	tilemap_breedte
+	jr	c,get_starting_position_loop
+	LD	De,1
+	inc	L
+	LD	A,L
+	CP	tilemap_hoogte
+	jr	c,get_starting_position_loop
+	ret	;use deflaut = 2,2	
+	
+found:
+	LD	A,L\ LD	(Y_begin),A
+	LD	A,E\ LD	(X_begin),A
+	ret
+	
+
+terminal_scan
+	LD	HL,8*tilemap_hoogte
+scan_loop_2	;saves a byte
+	Ld	DE,8*tilemap_breedte
+scan_loop
+	push	hl
+	 push	de
+	  call	gettile_8	;we're pretty damn lazy
+	  LD	A,(HL)
+	  cp	14	
+	 pop	de
+	pop	hl
+	push	hl
+	 push	de	;8 push/pops per loop?!?!?!
+	  call	z,explosie	
+	 pop	de
+	pop	hl
+	
+	or	a
+	LD	BC,8
+	ex	de,hl
+	sbc	hl,Bc
+	ex	de,hl
+	jr	nz,scan_loop
+	
+	or	a
+	sbc	hl,bc
+	jr	nz,scan_loop_2
+	ret
+	
+	
+	
+
+	
+	
+	
+	
+initalize_infotrons:
+	LD	D,0	;aantal
+	LD	HL,(imathptr1)
+	LD	BC,58*24
+	ld	a,2
+infotrons_loop:
+	cp	(HL)
+	jr	NZ,_
+	inc	D
+_
+	inc	hl
+	dec	bc
+	bit 	7,B
+	jr	z,infotrons_loop
+	
+	LD	A,d
+	LD	(infotrons),A
+	LD	(infotrons_needed),A
+	ret
+	
+scroll_in
+	LD	B,96+4	
+startloop:
+	push	BC
+	CALL	fastcopy
+	CALL	scroll_right3
+	EI\	halt
+	CALL	putsprites	;sprite routine doet het niet met xscroll <0?
+	pop	bc
+	djnz	startloop
+	ret
+	
+calucate_starting_position:
+	LD	A,(x_begin)		;xpos
+	LD	L,A
+	Ld	H,0
+	ADD	HL,HL		;mul by 8
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	(X_pos),HL
+	LD	(X_pos_temp),HL
+	LD	DE,-96/2
+	ADD	HL,DE
+	bit	7,H
+	jr	Z,more_than_0	
+	LD	HL,0
+more_than_0
+	LD	(X_scroll),HL
+	Ld	DE,-96
+	add	hl,de
+	LD	(X_scroll_temp),HL
+;-------------	
+	LD	A,(Y_begin)		;xpos
+	LD	L,A
+	Ld	H,0
+	ADD	HL,HL		;mul by 8
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	(Y_pos),HL
+	LD	(Y_pos_temp),HL
+	LD	DE,-62/2-1
+	ADD	HL,DE
+	bit	7,H
+	jr	Z,less_than_4
+	LD	HL,4
+less_than_4
+	LD	(Y_scroll),HL
+	LD	(Y_scroll_temp),HL
+	ret
+	
+	
+
+	

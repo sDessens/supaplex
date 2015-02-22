@@ -1,0 +1,555 @@
+#ifdef level_1 
+label_1 
+#include "/compressed/001.z80"  
+#endif 
+ 
+#ifdef level_2 
+label_2 
+#include "/compressed/002.z80"  
+#endif 
+ 
+#ifdef level_3 
+label_3 
+#include "/compressed/003.z80"  
+#endif 
+ 
+#ifdef level_4 
+label_4 
+#include "/compressed/004.z80"  
+#endif 
+ 
+#ifdef level_5 
+label_5 
+#include "/compressed/005.z80"  
+#endif 
+ 
+#ifdef level_6 
+label_6 
+#include "/compressed/006.z80"  
+#endif 
+ 
+#ifdef level_7 
+label_7 
+#include "/compressed/007.z80"  
+#endif 
+ 
+#ifdef level_8 
+label_8 
+#include "/compressed/008.z80"  
+#endif 
+ 
+#ifdef level_9 
+label_9 
+#include "/compressed/009.z80"  
+#endif 
+ 
+#ifdef level_10 
+label_10 
+#include "/compressed/010.z80"  
+#endif 
+ 
+#ifdef level_11 
+label_11 
+#include "/compressed/011.z80"  
+#endif 
+ 
+#ifdef level_12 
+label_12 
+#include "/compressed/012.z80"  
+#endif 
+ 
+#ifdef level_13 
+label_13 
+#include "/compressed/013.z80"  
+#endif 
+ 
+#ifdef level_14 
+label_14 
+#include "/compressed/014.z80"  
+#endif 
+ 
+#ifdef level_15 
+label_15 
+#include "/compressed/015.z80"  
+#endif 
+ 
+#ifdef level_16 
+label_16 
+#include "/compressed/016.z80"  
+#endif 
+ 
+#ifdef level_17 
+label_17 
+#include "/compressed/017.z80"  
+#endif 
+ 
+#ifdef level_18 
+label_18 
+#include "/compressed/018.z80"  
+#endif 
+ 
+#ifdef level_19 
+label_19 
+#include "/compressed/019.z80"  
+#endif 
+ 
+#ifdef level_20 
+label_20 
+#include "/compressed/020.z80"  
+#endif 
+ 
+#ifdef level_21 
+label_21 
+#include "/compressed/021.z80"  
+#endif 
+ 
+#ifdef level_22 
+label_22 
+#include "/compressed/022.z80"  
+#endif 
+ 
+#ifdef level_23 
+label_23 
+#include "/compressed/023.z80"  
+#endif 
+ 
+#ifdef level_24 
+label_24 
+#include "/compressed/024.z80"  
+#endif 
+ 
+#ifdef level_25 
+label_25 
+#include "/compressed/025.z80"  
+#endif 
+ 
+#ifdef level_26 
+label_26 
+#include "/compressed/026.z80"  
+#endif 
+ 
+#ifdef level_27 
+label_27 
+#include "/compressed/027.z80"  
+#endif 
+ 
+#ifdef level_28 
+label_28 
+#include "/compressed/028.z80"  
+#endif 
+ 
+#ifdef level_29 
+label_29 
+#include "/compressed/029.z80"  
+#endif 
+ 
+#ifdef level_30 
+label_30 
+#include "/compressed/030.z80"  
+#endif 
+ 
+#ifdef level_31 
+label_31 
+#include "/compressed/031.z80"  
+#endif 
+ 
+#ifdef level_32 
+label_32 
+#include "/compressed/032.z80"  
+#endif 
+ 
+#ifdef level_33 
+label_33 
+#include "/compressed/033.z80"  
+#endif 
+ 
+#ifdef level_34 
+label_34 
+#include "/compressed/034.z80"  
+#endif 
+ 
+#ifdef level_35 
+label_35 
+#include "/compressed/035.z80"  
+#endif 
+ 
+#ifdef level_36 
+label_36 
+#include "/compressed/036.z80"  
+#endif 
+ 
+#ifdef level_37 
+label_37 
+#include "/compressed/037.z80"  
+#endif 
+ 
+#ifdef level_38 
+label_38 
+#include "/compressed/038.z80"  
+#endif 
+ 
+#ifdef level_39 
+label_39 
+#include "/compressed/039.z80"  
+#endif 
+ 
+#ifdef level_40 
+label_40 
+#include "/compressed/040.z80"  
+#endif 
+ 
+#ifdef level_41 
+label_41 
+#include "/compressed/041.z80"  
+#endif 
+ 
+#ifdef level_42 
+label_42 
+#include "/compressed/042.z80"  
+#endif 
+ 
+#ifdef level_43 
+label_43 
+#include "/compressed/043.z80"  
+#endif 
+ 
+#ifdef level_44 
+label_44 
+#include "/compressed/044.z80"  
+#endif 
+ 
+#ifdef level_45 
+label_45 
+#include "/compressed/045.z80"  
+#endif 
+ 
+#ifdef level_46 
+label_46 
+#include "/compressed/046.z80"  
+#endif 
+ 
+#ifdef level_47 
+label_47 
+#include "/compressed/047.z80"  
+#endif 
+ 
+#ifdef level_48 
+label_48 
+#include "/compressed/048.z80"  
+#endif 
+ 
+#ifdef level_49 
+label_49 
+#include "/compressed/049.z80"  
+#endif 
+ 
+#ifdef level_50 
+label_50 
+#include "/compressed/050.z80"  
+#endif 
+ 
+#ifdef level_51 
+label_51 
+#include "/compressed/051.z80"  
+#endif 
+ 
+#ifdef level_52 
+label_52 
+#include "/compressed/052.z80"  
+#endif 
+ 
+#ifdef level_53 
+label_53 
+#include "/compressed/053.z80"  
+#endif 
+ 
+#ifdef level_54 
+label_54 
+#include "/compressed/054.z80"  
+#endif 
+ 
+#ifdef level_55 
+label_55 
+#include "/compressed/055.z80"  
+#endif 
+ 
+#ifdef level_56 
+label_56 
+#include "/compressed/056.z80"  
+#endif 
+ 
+#ifdef level_57 
+label_57 
+#include "/compressed/057.z80"  
+#endif 
+ 
+#ifdef level_58 
+label_58 
+#include "/compressed/058.z80"  
+#endif 
+ 
+#ifdef level_59 
+label_59 
+#include "/compressed/059.z80"  
+#endif 
+ 
+#ifdef level_60 
+label_60 
+#include "/compressed/060.z80"  
+#endif 
+ 
+#ifdef level_61 
+label_61 
+#include "/compressed/061.z80"  
+#endif 
+ 
+#ifdef level_62 
+label_62 
+#include "/compressed/062.z80"  
+#endif 
+ 
+#ifdef level_63 
+label_63 
+#include "/compressed/063.z80"  
+#endif 
+ 
+#ifdef level_64 
+label_64 
+#include "/compressed/064.z80"  
+#endif 
+ 
+#ifdef level_65 
+label_65 
+#include "/compressed/065.z80"  
+#endif 
+ 
+#ifdef level_66 
+label_66 
+#include "/compressed/066.z80"  
+#endif 
+ 
+#ifdef level_67 
+label_67 
+#include "/compressed/067.z80"  
+#endif 
+ 
+#ifdef level_68 
+label_68 
+#include "/compressed/068.z80"  
+#endif 
+ 
+#ifdef level_69 
+label_69 
+#include "/compressed/069.z80"  
+#endif 
+ 
+#ifdef level_70 
+label_70 
+#include "/compressed/070.z80"  
+#endif 
+ 
+#ifdef level_71 
+label_71 
+#include "/compressed/071.z80"  
+#endif 
+ 
+#ifdef level_72 
+label_72 
+#include "/compressed/072.z80"  
+#endif 
+ 
+#ifdef level_73 
+label_73 
+#include "/compressed/073.z80"  
+#endif 
+ 
+#ifdef level_74 
+label_74 
+#include "/compressed/074.z80"  
+#endif 
+ 
+#ifdef level_75 
+label_75 
+#include "/compressed/075.z80"  
+#endif 
+ 
+#ifdef level_76 
+label_76 
+#include "/compressed/076.z80"  
+#endif 
+ 
+#ifdef level_77 
+label_77 
+#include "/compressed/077.z80"  
+#endif 
+ 
+#ifdef level_78 
+label_78 
+#include "/compressed/078.z80"  
+#endif 
+ 
+#ifdef level_79 
+label_79 
+#include "/compressed/079.z80"  
+#endif 
+ 
+#ifdef level_80 
+label_80 
+#include "/compressed/080.z80"  
+#endif 
+ 
+#ifdef level_81 
+label_81 
+#include "/compressed/081.z80"  
+#endif 
+ 
+#ifdef level_82 
+label_82 
+#include "/compressed/082.z80"  
+#endif 
+ 
+#ifdef level_83 
+label_83 
+#include "/compressed/083.z80"  
+#endif 
+ 
+#ifdef level_84 
+label_84 
+#include "/compressed/084.z80"  
+#endif 
+ 
+#ifdef level_85 
+label_85 
+#include "/compressed/085.z80"  
+#endif 
+ 
+#ifdef level_86 
+label_86 
+#include "/compressed/086.z80"  
+#endif 
+ 
+#ifdef level_87 
+label_87 
+#include "/compressed/087.z80"  
+#endif 
+ 
+#ifdef level_88 
+label_88 
+#include "/compressed/088.z80"  
+#endif 
+ 
+#ifdef level_89 
+label_89 
+#include "/compressed/089.z80"  
+#endif 
+ 
+#ifdef level_90 
+label_90 
+#include "/compressed/090.z80"  
+#endif 
+ 
+#ifdef level_91 
+label_91 
+#include "/compressed/091.z80"  
+#endif 
+ 
+#ifdef level_92 
+label_92 
+#include "/compressed/092.z80"  
+#endif 
+ 
+#ifdef level_93 
+label_93 
+#include "/compressed/093.z80"  
+#endif 
+ 
+#ifdef level_94 
+label_94 
+#include "/compressed/094.z80"  
+#endif 
+ 
+#ifdef level_95 
+label_95 
+#include "/compressed/095.z80"  
+#endif 
+ 
+#ifdef level_96 
+label_96 
+#include "/compressed/096.z80"  
+#endif 
+ 
+#ifdef level_97 
+label_97 
+#include "/compressed/097.z80"  
+#endif 
+ 
+#ifdef level_98 
+label_98 
+#include "/compressed/098.z80"  
+#endif 
+ 
+#ifdef level_99 
+label_99 
+#include "/compressed/099.z80"  
+#endif 
+ 
+#ifdef level_100 
+label_100 
+#include "/compressed/100.z80"  
+#endif 
+ 
+#ifdef level_101 
+label_101 
+#include "/compressed/101.z80"  
+#endif 
+ 
+#ifdef level_102 
+label_102 
+#include "/compressed/102.z80"  
+#endif 
+ 
+#ifdef level_103 
+label_103 
+#include "/compressed/103.z80"  
+#endif 
+ 
+#ifdef level_104 
+label_104 
+#include "/compressed/104.z80"  
+#endif 
+ 
+#ifdef level_105 
+label_105 
+#include "/compressed/105.z80"  
+#endif 
+ 
+#ifdef level_106 
+label_106 
+#include "/compressed/106.z80"  
+#endif 
+ 
+#ifdef level_107 
+label_107 
+#include "/compressed/107.z80"  
+#endif 
+ 
+#ifdef level_108 
+label_108 
+#include "/compressed/108.z80"  
+#endif 
+ 
+#ifdef level_109 
+label_109 
+#include "/compressed/109.z80"  
+#endif 
+ 
+#ifdef level_110 
+label_110 
+#include "/compressed/110.z80"  
+#endif 
+ 
+#ifdef level_111 
+label_111 
+#include "/compressed/111.z80"  
+#endif 
+ 

@@ -1,0 +1,830 @@
+;0	omlaag	00	
+;1	links	01	
+;2	rechts	10
+;3	omhoog	11
+
+;3,2,0,1
+
+;data structuur:
+;X,X,Y,P
+;P=0aa00bcc
+;aa=sprite
+;b=beweging flag, 1=stilstaan
+;c=richting
+;extratie van sprite adres:
+;LD b,A
+;and 3\ add a,a
+;add a,a\ add a,a
+;or b
+;and %01111000
+
+;probleem: je moet een "previous coordinaat" onthouden, anders gaat de ai in elkaar...
+;<S>eerst ai berekenen, daarna coordinaat verwijderen? nee -> de benodigde info gaat verloren
+;eerst coordinaat verwijderen, daarna ai berekenen? nee -> dan gaan de sprites "chainen"
+;oplossing: prev-coordinaat opslaan in bit 3,4: 0ssPPbrr, naarna prev-coordinaat wissen met behulp van deze info
+;</S>
+;wis gewoon elke 8e frame, NA het berekenen van de AI, de "1" waar hij op staat, ALS hij bewoog
+
+update_HL:	;modificeert HL met A als input, tilemap adres (HL)
+	push	de
+	LD	DE,tilemap_breedte
+	and	7
+	cp	0\ jr	nz,$+3\	add	hl,de
+	cp	1\ jr	nz,$+3\	dec	hl
+	cp	2\ jr	nz,$+3\	inc	hl
+	cp	3\ jr	nz,$+3\	sbc	hl,de
+	pop	de
+	RET
+	
+update_HL_DE:	;mod hl en de met a als input, tilemap coordinaten! (de,hl)
+	push	af
+	and	7	;anders doet ie het niet meer met prev. coordinaten
+	cp	0\ jr	nz,$+3\ inc hl
+	cp	1\ jr	nz,u1\ dec de
+u1:	cp	2\ jr	nz,u2\ inc de
+u2:	cp	3\ jr	nz,$+3\	dec hl
+	pop	af
+	ret
+	
+update_HL_DE_8:	;mod hl en de met a als input, tilemap coordinaten! (de,hl)
+	push	af
+	push	bc
+	LD	BC,8
+	and	7	;anders doet ie het niet meer met prev. coordinaten
+	cp	0\ jr	nz,$+3\	add	hl,bc
+	cp	1\ jr	nz,u3\ ex de,hl\ sbc hl,bc\ ex de,hl
+u3:	cp	2\ jr	nz,u4\ ex de,hl\ add hl,bc\ ex de,hl
+u4:	cp	3\ jr	nz,$+3\	sbc	hl,bc
+	pop	bc
+	pop	af
+	ret
+
+
+	
+rotate_map:	;begin bij $+1
+.db 1,3,2,0,1,3
+;3,2,0,1
+;u,r,d,l
+
+
+rotate_1:	;modificeert A voor kloksgewijze draai
+	push	bc
+	push	hl	
+	LD	HL,rotate_map+1
+	and 3	;just in case
+	ld	b,8
+	cpir
+	LD	A,(HL)
+	pop	hl
+	pop	bc
+	ret
+
+rotate_2:
+	push	bc
+	push	hl
+	LD	HL,rotate_map+1
+	and 	3	
+	LD	b,8
+	cpir	;eindigt bij target+1..
+	dec	hl
+	dec	hl
+	LD	A,(HL)
+	pop	hl
+	pop	bc
+	ret
+	
+	
+update_AI:
+	LD	A,(AI_amount)
+	or	a
+	ret	z
+	LD	B,A
+	LD	HL,ai_ram+3
+update_ai_loop:
+	push	BC
+	LD	A,(HL)\ dec hl
+	LD	B,(HL)\ dec hl	;Y
+	LD	D,(HL)\ dec hl	;X
+	LD	E,(HL)		;X
+	push	HL
+	LD	L,B
+	LD	H,0
+	bit	2,A
+	CALL	update_hl_de
+	LD	B,L
+	pop	HL
+	LD	(HL),E\ inc hl
+	LD	(HL),D\ inc hl
+	LD	(HL),B\ ;inc hl
+	;LD	A,(HL)		;a is hetzelfde
+	LD	DE,5
+	add	hl,de
+	pop	bc
+	djnz	update_ai_loop
+	ret
+	
+place_block:
+;input: HL, adres van ai +4
+;A, de richting
+	push	af
+	push	hl
+	dec	hl	;skip A
+	dec	HL
+	LD	C,(HL)\ dec	HL
+	LD	d,(HL)\ dec	hl
+	Ld	e,(HL)
+	Ld	H,0
+	LD	L,C
+	call	gettile_8
+	call	update_hl
+	LD	(HL),17
+	pop	hl
+	pop	af
+	ret
+	
+remove_block:	;verwijdert de "17" uit het vakje waar ie op stond, dus na de ai, voor de ai-update routine
+	LD	A,(frame)
+	and	7
+	ret	nz
+	
+	LD	a,(ai_amount)
+	or	a
+	ret	z
+
+	LD	B,A
+	LD	HL,AI_ram
+	LD	C,0
+remove_block_loop:
+	inc	C
+	push	BC
+	 LD	E,(HL)\ inc	hl
+	 LD	D,(HL)\ inc	hl
+	 LD	B,(HL)\ inc	hl
+	 LD	A,(HL)\ inc	hl
+	 bit	2,A
+	 jr	Nz,remove_block_end	;if beweegt..
+	 push	hl
+	  LD	L,B
+	  LD	H,0
+	  call	gettile_8
+	  LD	A,(HL)
+	  cp	0
+	  jr	z,remove_ai_block
+	  LD	(HL),0
+	 pop	hl
+remove_block_end:
+	pop	Bc
+	djnz	remove_block_loop
+	ret
+	
+remove_ai_block:
+	pop	hl
+	pop	bc
+	dec	c
+	push	bc
+	push	hl
+	;inc	c
+	call	remove_ai_c
+	pop	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	jr	remove_block_end
+	
+remove_ai_ix:	;ix als input
+	push	hl
+	push	de
+	push	bc
+	push	ix\ pop de
+	LD	Hl,AI_ram
+	or a
+	ex de,hl
+	sbc	hl,de
+	
+	srl h\ rr l
+	srl h\ rr l	;for 2-byte support, just in case
+	LD	C,L
+	
+	LD	A,C
+		
+	call	remove_ai_c
+	jp pop3ret
+	
+	
+remove_ai_C	;c als input, destroys all
+	LD	A,(ai_amount)
+	or 	a
+	ret	Z	;what? removing someting that does not exist?
+	
+	sub	c
+	ret	c	;item to be removed > item amount
+	ret	z	;item to be removed == last item
+	add	a,c
+
+	
+	dec	a
+	LD	(ai_amount),A
+	ret	z	;geen ai meer?
+	
+	;inc	a
+	LD	D,C	;backup van input
+	LD	L,A
+	LD	H,0
+	add	hl,hl
+	add	hl,hl
+	LD	B,h
+	LD	C,l	;aantal keer= 4*(aantal-C)
+;BC klaar
+	LD	L,D
+	LD	H,0
+	add	hl,hl
+	add	hl,hl
+	LD	DE,AI_ram
+	add	hl,de
+	push	HL
+	 LD	De,4	;groote van item)
+	 add	hl,de
+;HL klaar
+	pop	de
+;DE klaar
+	ldir
+	ret
+	
+	
+ai:	
+	LD	A,(frame)
+	and	7
+	ret	nz
+	
+	LD	a,(ai_amount)
+	or	a
+	ret	z
+
+	LD	B,A
+	LD	HL,AI_ram
+ai_loop:
+	push	BC
+	 LD	E,(HL)\ inc	hl
+	 LD	D,(HL)\ inc	hl
+	 LD	B,(HL)\ inc	hl
+	 LD	A,(HL)
+	 push	hl
+	  LD	L,B
+	  LD	H,0
+	  LD	B,A	;beckup zodat je type niet vernietigt
+	  push 	BC
+	  
+	   call	gettile_8
+	   bit	2,A
+	   jr	NZ,blocked
+
+	   call	ai_schaar
+blockedret:	   
+	  pop	BC
+	  LD	D,A	;nieuwe richting, mee OR'en aan het einde
+	  LD	A,B	;oude zooi
+	  and	%01100000	;type eruit halen
+	  LD	E,A		;oplaan in E, meet Or'en aan het einde
+	 
+	  LD	A,B		;bevat nog steeds oude richting
+	  sla	a
+	  sla	a
+	  sla	a
+	  and	%00011000
+	  or	D	;nieuwe richting toevoegen (00000xxx)
+	  or	E	;type toevoegen 	   (0xx00000)
+	  
+	 pop	hl
+	 LD	(HL),A\ inc	HL
+	 call	place_block		 
+	pop	bc
+	djnz	ai_loop
+	ret
+	
+blocked:	
+
+
+	LD	DE,blockedret
+	push	DE
+
+	and	3
+	call	rotate_2
+	jr	blocked_ai
+	
+ai_schaar:	;call deze routine met:
+;A, de richting
+;HL tilemap adres
+;output: A, de nieuwe richting
+;bit 2 van A is geset als ie niet beweegt
+	
+	and	3
+	push	HL
+	CALL	rotate_2	;check naar links
+	call	update_HL
+	LD	C,A		;c=backup van A
+	LD	A,(HL)
+	or	a		;check a=0, zoja, exit
+	LD	A,C		;A herstellen
+	pop	HL
+	ret	z		;walkable, draai naar links en beweeg
+		
+blocked_ai:
+	
+
+	push	HL
+	CALL	rotate_1	;check naar links
+	call	update_HL
+	LD	C,A		;c=backup van A
+	LD	A,(HL)
+	or	a
+	LD	A,C
+	pop	HL
+	ret	z		;walkable, ga rechtdoor
+;fail, draai naar rechts
+	push	HL
+	call	rotate_1
+	call	update_HL
+	Ld	C,A
+	Ld	A,(HL)
+	or	A
+	LD	A,C
+	pop	HL
+	RET	Z
+	
+	set 	2,A
+	RET
+	
+	
+display_AI_1:
+	LD	A,(AI_amount)
+	or	a
+	ret	z
+	LD	HL,AI_RAM+3	;beginnen bij laatste element
+	ld	b,a
+display_AI_1_loop:
+	push	bc
+	 LD	A,(HL)
+	 and	%00000011
+	  add a,a\ add a,a\ add a,a\ add a,a
+	
+	 LD	B,0
+	 LD	C,A
+	  LD	A,(frame)
+	 and	8
+	 or	c
+	 LD	C,A
+	 LD	IX,AI_sprites
+	 add	IX,BC	;sprite adres
+	
+	 dec	hl	;Y positie
+	 LD	C,(HL)\ dec	HL
+	 LD	B,0
+	 LD	d,(HL)\ dec	hl
+	 Ld	e,(HL)
+	
+	
+	 push	HL
+	  push	BC
+	  pop	HL	;X
+	  ex	de,hl
+	  call	putspriteOR
+	 pop	hl
+	 LD	DE,7
+	 add	hl,de
+	pop	BC
+	DJNZ	display_AI_1_loop
+	ret
+	
+display_AI_2:
+	LD	A,(AI_amount)
+	or	a
+	ret	z
+	LD	HL,AI_RAM+3	;beginnen bij laatste element
+	ld	b,a
+display_AI_2_loop:
+	push	bc
+	 LD	A,(HL)
+	 and	%00000011
+	  add a,a\ add a,a\ add a,a\ add a,a
+	
+	 LD	B,0
+	 LD	C,A
+	 LD	A,(frame)
+	 and	8
+	 or	c
+	 LD	C,A
+	 LD	IX,AI_sprites
+	 add	IX,BC	;sprite adres
+	
+	 dec	hl	;Y positie
+	 LD	C,(HL)\ dec	HL
+	 LD	B,0
+	 LD	d,(HL)\ dec	hl
+	 Ld	e,(HL)
+	
+	
+	 push	HL
+	  push	BC
+	  pop	HL	;X
+	  ex	de,hl
+	  call	putspriteXOR
+	 pop	hl
+	 LD	DE,7
+	 add	hl,de
+	pop	BC
+	DJNZ	display_AI_2_loop
+	ret 
+	
+	
+verwijder_explosies:
+	LD	A,(frame)
+	and	7
+	ret	nz	
+	LD	A,(explosies)
+	or	a
+	ret	z
+	LD	B,A
+	LD	C,B	;backup v explosies, onthoud
+	LD	Hl,explosie_stack
+verwijder_explosies_loop
+	push	bc
+	
+	 LD	A,(HL)\ dec hl	;p, tile, 0 of 2
+	 LD	E,(HL)\ dec hl	;y
+	 LD	B,(HL)\ dec hl	;x
+	 LD	C,(HL)\ dec hl	;x
+	 push	hl
+	  LD	H,0	;yh
+	  LD	L,E	;yl
+	  	  
+	  LD	D,B	;xh
+	  LD	E,C	;xl
+	 	 
+	  LD	B,A	;tile
+	  
+	  cp	explosie_tile
+	  jp	nz,no_explosion	;check of de explosie een explosie tile voortbrengt
+	  call	explosie	
+	  jp	no_explosie_ret
+	    
+no_explosion
+	  call	explosie_B	;maak een nieuwe explosie om de oude te wissen (rare woordkeus..)
+no_explosie_ret
+	 pop	hl
+	pop	bc
+	djnz	verwijder_explosies_loop
+;############################################## pass 1 complete (het ontploffen van explosies)
+
+;check nu voor alle AI en tiles of er nieuwe explosies komen
+;ga na voor elke explosie, of er AI in de buurt is (of een 14,15,16 tile, check hierna), zoja, boem
+	;LD	A,(AI_amount)
+	;or	a
+	;jr	NZ,check_explosie_loop_start
+	;LD	A,(explosies)
+	;LD	C,A	;zit al in c...
+	;jp	NO_ai
+;############################# begin AI gedeelte
+check_explosie_loop_start
+	LD	A,C ;(explosies)
+	LD	B,A
+	LD	C,A	;backup van orginele aantal explosies, push bc
+	LD	HL,explosie_stack
+check_explosie_loop:
+	push	bc
+;haal coordinaten van explosie:
+	 LD	A,(HL)\ dec hl	;p	;irrevelant
+	 LD	c,(HL)\ dec hl	;y
+	 
+	 LD	d,(hl)\ dec hl	;x
+	 LD	e,(HL)\ dec hl	;x
+	 Ld	B,0
+	 
+	 push	hl
+	 
+;check nu of A 0 of 2 is, zo niet, skip de hele zooi
+	or	a
+	jr	z,succes2
+	cp	2
+	jr	nz,explosion_explosie_ret
+	
+succes2
+	 
+	 call	check_explosive_tiles
+	 
+;AI check komt hier
+	  LD	A,9\ add A,c\ LD c,A 
+	 
+	  LD	HL,9
+	  add	hl,de
+	  ex	de,hl
+;NU: DE=X
+;C=Y+9
+;B=0+9
+	  
+explosion_explosie
+
+	  LD	A,(AI_amount)	;maak een check!!!
+	  or a
+	  jr	Z,skip_check_ai
+	  LD	IX,AI_ram	;xxyp,
+check_explosie_ai_loop	 
+	  push	af
+	   push	de
+	    LD	L,(ix)\ inc IX	;gebruik IX bij gebrek aan regs, ja ik weet dat je (IX+1) kan doen
+	    LD	H,(ix)\ inc IX
+	    
+	    or a\ sbc	hl,de	;Xai-(Xex+9)
+	    jr	nc,fail_AI_1	;check rechts
+	    LD	de,18	
+	    add	hl,de
+	    jr	nC,fail_AI_1
+;code komt hier? de X positie klopt, de de Y
+	    
+	    LD	L,(IX)\ inc IX
+	    LD	H,0\ inc IX	;altijd 0
+	    sbc	hl,bc
+	    jr	nc,fail_ai
+	    LD	de,18
+	    add	hl,de
+	    jr	nc,fail_AI
+	   	    
+;de code komt hier? de ai ontploft, haal die prut x en y positie en trigger explosie
+	    push	bc
+	     dec ix\ LD	h,(IX)	;p
+	     dec ix\ LD	l,(IX)	;y
+	     dec ix\ LD D,(IX)	;x
+	     dec ix\ LD	e,(IX)	;x
+		    
+	     LD	A,H
+	     LD	H,0
+	     	     
+	     and	%01100000	;electron
+	     cp 	%01100000
+	     push	af
+	      call	Z,explosie_infotron
+	     pop	AF
+	     call	nz,explosie
+	     call	remove_ai_ix
+	     
+;ai verwijderd, hoef niet terug te gaan naar het vorige element (IX)
+
+	    pop	bc
+	    jr	fail_ai
+fail_ai_1:
+	    inc ix\ inc ix
+	    
+fail_ai:   
+
+	   pop	de
+	  pop	AF
+	  dec	a
+	  jr	nz,check_explosie_ai_loop
+	  cp	-1
+	  jr 	z,check_explosie_ai_loop
+skip_check_ai:
+;kijken voor explosive tiles, (later)	 
+explosion_explosie_ret 	
+	 pop	HL
+ 	pop	bc
+	dec	b\ jp nz,check_explosie_loop
+no_ai
+;nu:	C=oud aantal explosies
+	LD	A,C
+	add	A,A
+	add	A,A
+	LD	Hl,explosie_stack
+	LD	E,A
+	LD	D,0
+	sbc	hl,de	;bron..
+	LD	DE,explosie_stack ;bestemming
+
+	LD	A,(explosies)
+	sub	C
+	LD	(explosies),A
+	ret	z
+
+
+	add	a,a
+	add	a,a
+	LD	C,A
+	LD	B,0
+	LDDR
+	
+	ret
+	
+	
+	
+check_explosive_tiles:	;extreem inefficient.. :P
+	push	bc
+	push	de	;bewaren,!!
+	
+	push	bc
+	pop	hl
+	
+	
+
+	LD	Bc,-8
+	add	hl,bc
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+;(de,hl) = linksboven
+	call	is_tile_explosive	;linksboven
+	ex	de,hl
+	Ld	BC,8
+	add	hl,bc
+	ex	de,hl
+	call	is_tile_explosive	;boven
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	call	is_tile_explosive	;rechtsboven
+	add	hl,bc
+	call	is_tile_explosive	;rechts..
+	add	hl,bc
+	call	is_tile_explosive	;rechts onder
+	LD	bc,-8
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	call	is_tile_explosive
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	call	is_tile_explosive	;linksonder
+	add	hl,bc
+	call	is_tile_explosive	;links
+	pop	de
+	pop	bc
+	ret
+
+
+is_tile_explosive:	;input een tile + coordinaten... boem?
+	push	bc
+	push	hl
+	push	de
+	call	gettile_8
+	LD	A,(HL)
+	
+	pop	de
+	pop	hl
+	pop	bc
+	;call	dispa
+	cp	14
+	jr	z,succes	;spelling? LOL
+	;cp	16
+	;jr	z,succes
+	cp	15
+	ret	nz
+succes:
+	push	hl
+	push	de
+	push	bc
+	call	explosie
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+	
+	
+	
+;datastructuur:
+;XXYP
+;p=sprite
+;je leest alles omgekeerd (dec), dus pyxx
+	
+explosie:	;input: hl, DE, tilemap adres
+	LD	C,0
+	jr	explosie_x
+explosie_infotron
+	LD	C,2
+explosie_x		;input explosie tile voor dubbele explosie..
+	push	de	;X
+	push	hl	;Y, alleen L nodig
+
+	LD	DE,explosie_stack
+	LD	A,(explosies)
+	LD	L,A
+	inc	a
+	LD	(explosies),A
+	LD	H,0
+	ADD	HL,HL
+	add	hl,hl
+	ex	de,hl
+	sbc	hl,de	;stack "groeit" naar beneden... 
+	pop	de	;alleen E nodig
+	LD	(HL),C\ dec hl	;p, altijd 0, sla tile troep in op (dat is C, vandaar..)
+	LD	(HL),E\ dec hl	;Y
+	pop	bc	;beide coordinaten nodig
+	LD	(HL),B\ dec hl	;x
+	LD	(HL),C		;x
+	
+	Ld	D,0
+	ex 	de,hl		;E bevatte Y, zit nu in HL
+	
+	LD	D,B		;X opslaan in hl
+	Ld	E,C
+	
+;hier moet ook ergens detectie voor ai en murphy komen, tilemap manuplatie?
+	
+	LD	B,explosie_tile	;tile
+explosie_B	;hetzelfde, maar maakt geen explosie op de stack, dec (explosies) handmatig!
+	
+	LD	A,5\ call explosie_check_skip
+	LD	A,3\ call explosie_check
+	LD	A,2\ call explosie_check
+	LD	A,0\ call explosie_check
+	LD	A,0\ call explosie_check
+	LD	A,1\ call explosie_check
+	LD	A,1\ call explosie_check
+	LD	A,3\ call explosie_check
+	LD	A,3\ call explosie_check
+	ret
+	
+pop3ret:
+	pop bc
+	pop de
+	pop hl
+	ret
+	
+explosie_check:
+;input: (HL), de tile
+;output: maakt een item aan met tile geinput in B
+	call	update_hl_de_8	;inefficient? boeie :P
+	push	hl
+	push	de
+	push	bc	;man, ik haad dat gepush...
+	call	gettile_8
+	LD	A,(HL)
+	
+	cp	5		;muur
+	jr	Z,pop3ret
+	cp	14		;floppy
+	jr	z,pop3ret	
+	cp	15		;LP-plaat :P
+	jr	z,pop3ret	
+	;cp	16		;batterij... zorg goed voor het mileu :P
+	;jr	Z,pop3ret
+	
+	pop	bc
+	pop	de
+	pop	hl
+explosie_check_skip	
+	LD	A,4	;beweging
+	push	hl
+	push	de
+	push	bc
+	call	create_item
+	jr 	pop3ret
+	;pop	bc
+	;pop	de
+	;pop	hl
+	;ret
+	
+drop_batterij:
+	LD	de,(X_pos)
+	LD	(X_pos_batterij),de
+	LD	hl,(Y_pos)
+	LD	(Y_pos_batterij),hl
+	LD	A,6
+	LD	(batterij_timer),A
+	Ld	A,(batterij)
+	dec	A
+	LD	(batterij),A
+	call	display_batterij
+	
+	LD	A,(frame)	
+	LD	(batterijframe),A	;zorgt dat het menu tevoorschijn komt
+	LD	A,8
+	LD	(menu2),A
+	
+	Ld	A,5
+	LD	(sprite),A
+	
+	ret
+	
+batterij_timer_update
+	LD	A,(frame)
+	and	7
+	ret	nz
+	
+	LD	HL,batterij_timer
+	LD	A,(HL)
+	or	a
+	ret	z
+	dec	(HL)
+	push	af
+	LD	HL,(Y_pos_batterij)
+	LD	DE,(X_pos_batterij)
+	
+	pop	af
+	jp	z,explosie
+
+
+	LD	A,5
+	LD	B,23
+	call	create_item
+	
+	ret
+	

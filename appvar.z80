@@ -1,0 +1,97 @@
+; the appvar is cancelled
+; this piece of code of obselete
+
+; GET_appvar
+	; ld	hl,333+20	;check if the user has enough memory
+	; bcall(_enoughmem)
+	; jp	c,errappvar
+
+	; LD	HL,AppVarName 	;look up the var
+	; rst	20h
+	; BCALL(_ChkFindSym)	
+;DE 	the lovation of the appvar in RAM
+;HL 	appvar in VAT
+;B 	0 if in RAM (it shouldnt...)
+;carry:	set if NOT found
+	; jr	C,create_appvar	;create the var if it doesnt exist
+	; LD	A,B
+	; OR	A
+	; JR	Z,appvar_in_ram	;app in arc? unarcive
+	; LD	HL,AppVarName 
+	; rst	20h
+	; bcall(_ARC_UNARC)
+; appvar_in_ram:			;the app is now in RAM, yay..
+	; RET	
+	
+	
+	
+; create_appvar:
+	; ld	hl,333+20
+	; bcall(_enoughmem)
+	; jp	c,errappvar
+	
+	; LD	HL,AppVarName 
+	; rst	20h
+	; LD	hl,333+20	;size 
+	; BCALL(_CreateAppVar)
+	; BCALL(_ChkFindSym)
+	; jr	appvar_in_ram
+	
+	
+fetch_tilemap_mem:
+	ld hl,mem_i_need	;a multiple of 9
+	BCALL(_EnoughMem)
+	jp c,quit_app
+
+	ld de,mem_i_need
+	ld hl,(FPS)
+	ld (iMathPtr1),hl
+	add hl,de
+	ld (FPS),hl
+	RET
+
+	
+	
+AppVarName:
+.db AppVarObj,"Supaplex",0
+
+
+delay:
+	LD	A,(interrupt_counter)
+	LD	B,A
+	LD	A,(delay_time)
+	add	A,16
+	cp 	B	;fps= 30 - 2(x-16), daarna checken op carry
+	JR	nc,delay
+	xor	a
+	Ld	(interrupt_counter),A
+	
+	LD	A,(frame)
+	and	7
+	ret	nz
+
+	
+	LD	A,$FD
+	out	(1),A
+	LD	A,(HL)	;delay, 7 cc 1 byte
+	in	A,(1)
+	bit	2,A
+	jr	z,plus		;dan druk je dus op - ...
+	bit	1,A
+	ret	nz
+minus:
+	LD	A,(delay_time)
+	or	a
+	ret	z
+	dec	a
+	LD	(delay_time),A
+	ret
+	
+plus:
+	LD	A,(delay_time)
+	cp	16	;max
+	ret	nc
+	inc	a
+	LD	(delay_time),A
+	ret
+

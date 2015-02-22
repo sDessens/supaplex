@@ -1,0 +1,350 @@
+putsprites:	
+	LD	HL,(X_POS_temp)
+	LD	DE,(Y_pos_temp)
+	LD	IX,murphy
+	LD	A,(sprite)
+	sla 	a
+	sla 	a
+	sla 	a
+	LD	B,0
+	LD	C,A
+	ADD	IX,BC
+	
+	CALL	putspriteor
+	RET
+	
+putsprites2:
+	LD	HL,(X_POS_temp)
+	LD	DE,(Y_pos_temp)
+	LD	IX,murphy
+	LD	A,(sprite)
+	sla 	a
+	sla 	a
+	sla 	a
+	LD	B,0
+	LD	C,A
+	ADD	IX,BC
+	CALL	putspritexor
+	RET
+	
+adjust_sprite:
+	LD	A,(sprite)
+	or	a
+	ret	z
+	;cp	4
+	ret	z
+	cp	5
+	ret	z	
+	
+	LD	B,A
+	LD	A,(frame)
+	AND	%00000111
+	JR	NZ,zz
+	
+	
+;check of de sprite waar je op staat een pijp is
+	LD	HL,(X_pos)
+	LD	De,(X_pos_previous)
+	or	a
+	sbc	hl,de
+	LD	DE,(Y_pos)
+	ADD	HL,DE
+	LD	DE,(Y_pos_previous)
+	or	a
+	SBC	HL,DE
+	JR	NZ,zz
+
+	
+	LD	A,0		
+	LD	(sprite),A	
+	RET	
+
+zz:	
+	inc	b		
+	AND	%00000011
+	LD	A,B
+	JR	nz,$+2+1
+	xor	1		;xor X=a+-1
+	dec	a
+	
+	LD	(sprite),A
+	RET
+
+move_vertical:
+	LD	A,(frame)
+	;AND	%00000001
+	;RET	NZ
+	LD	HL,(X_pos)
+	LD	DE,(X_pos_temp)
+	or 	a
+	sbc 	hl,de
+	add 	hl,de
+	RET	Z
+	JP	C,move_left
+	inc	DE
+	inc	DE
+move_left:
+	dec	DE
+	LD	(X_pos_temp),DE
+	RET
+
+move_horizontal:
+	LD	A,(frame)
+	;AND	%00000001
+	;RET	NZ
+	LD	HL,(Y_pos)
+	LD	DE,(Y_pos_temp)
+	or 	a
+	sbc 	hl,de
+	add 	hl,de
+	RET	Z
+	JP	C,move_up
+	inc	DE
+	inc	DE
+move_up:
+	dec	DE
+	LD	(Y_pos_temp),DE
+	RET
+	
+	
+
+;100 en nog wat bytes... veel minder dan de versie met clipping
+
+putspritexor:	;tekenen met or, wissen met xor
+	CALL	putsprite1
+	ret	nc
+	CALL	putsprite2
+	RET
+	
+putspriteor:	;achtergrond wissen..
+	CALL	putsprite1
+	ret	nc
+	CALL	putsprite3
+	RET
+
+; HL = xpos	; is doe 2 bit inputs, omdat de maps breder worden dan 32 bytes
+; DE = ypos	; en 32*8 = 256, dat past niet in 1 reg
+; IX = image address
+putsprite1:
+	
+	
+	LD	BC,8
+	ADD	HL,BC
+			
+	LD	BC,(X_scroll_temp)
+	or	A		
+	SBC	HL,BC	
+	ccf	
+	RET	NC		;Xpos - Xscroll, linkerkant check
+
+	LD	BC,(breedte-1)*8
+	or	a
+	SBC	HL,BC
+	ADD	HL,BC	
+	RET	NC		;rechterkant check
+	
+	LD	A,L		;aantal keer shiften, MOD 8 doen we later, zodat je meteen de zero flag kan testen
+		
+	SRL	H\	RR	L
+	SRL	H\	RR	L
+	SRL	H\	RR	L
+	
+	push	HL	
+	pop	BC	;BC=XPOS
+
+	
+	EX	DE,HL
+	LD	DE,8
+	ADD	HL,DE
+	
+	LD	DE,(Y_scroll_temp)
+	or	A		
+	SBC	HL,DE		;Ypos - Yscroll
+	ccf
+	RET	NC		;bovenkant check, werkt niet?
+	
+	
+	
+	LD	DE,(hoogte-1)*8
+	or	a
+	SBC	HL,DE
+	ADD	HL,DE	
+	RET	NC		;onderkant check
+
+		
+;nu:
+;BC = Xpos
+;HL = Ypos	
+	
+;nu doen we HL maal de breede van buffer (14)
+	LD	D,H
+	LD	E,L
+
+	ADD	HL,HL	;2
+	ADD	HL,DE	;3
+	ADD	HL,HL	;6
+	ADD	HL,DE	;7
+	ADD	HL,HL	;14
+;nu voegen we xpos toe	
+	ADD	HL,BC
+	
+		
+
+;en het graph buffer
+	LD	DE,grbuf
+	ADD	HL,DE
+	scf
+	RET
+	
+putsprite2:	
+	LD	B,8	;hoogte...
+	AND	%00000111
+	JR	Z,_aligned
+	
+
+_Not_aligned:
+	LD	C, A
+	LD	DE, 13
+
+_RowLoop:
+	PUSH	BC
+	LD	B,C		;C = aantal keer shiften
+	LD	A,(IX)		;haal tile data op
+	LD	C,0		;zero 2e byte
+_ShiftLoop:
+	SRL	A
+	RR	C
+	DJNZ	_ShiftLoop
+	
+	XOR	(HL)
+	LD	(HL), A
+
+	INC	HL
+	LD	A, C
+	XOR	(HL)
+	LD	(HL), A
+
+	ADD	HL, DE
+	INC	IX
+	POP	BC
+	DJNZ	_RowLoop
+	RET
+
+_Aligned:
+    LD     DE, 14
+
+_PutLoop:
+    LD     A, (IX)
+    XOR    (HL)
+    LD     (HL), A
+    INC    IX
+    ADD    HL, DE
+    DJNZ   _PutLoop
+    RET
+
+    
+    
+    
+    
+putsprite3:	;ik heb de routines gewoon gesplitst, anders word ie te sloom
+ 	AND	%00000111
+	LD	B,8	;hoogte...
+	JR	Z,_aligned2
+	LD	D,A
+	LD	B,A
+	LD	C,%11111111
+bitshiftloop:
+	SRL	C
+	djnz	bitshiftloop
+	LD	A,C
+	cpl
+	LD	(bitmask),A
+	LD	B,8	;hoogte
+	LD	A,D
+	
+	
+	
+
+_Not_aligned2:
+	LD	C, A
+	LD	DE, 13
+
+_RowLoop2:
+	PUSH	BC
+	LD	B,C		;C = aantal keer shiften
+	LD	A,(IX)		;haal tile data op
+	LD	C,0		;zero 2e byte
+_ShiftLoop2:
+	SRL	A
+	RR	C
+	DJNZ	_ShiftLoop2
+	
+	LD	B,A
+	LD	A,(bitmask)
+	AND	(HL)
+	OR	B
+	LD	(HL), A
+
+	INC	HL	
+	LD	A,(bitmask)
+	cpl
+	AND	(HL)
+	OR	C
+	LD	(HL), A
+
+	ADD	HL, DE
+	INC	IX
+	POP	BC
+	DJNZ	_RowLoop2
+	RET
+	
+	RET
+
+	
+_Aligned2:
+	LD	DE, 14
+
+_PutLoop2:
+	LD	A, (IX)
+	LD	(HL), A
+	INC	IX
+	ADD	HL, DE
+	DJNZ	_PutLoop2
+	
+	;BCALL(_getkey)
+	RET
+    
+
+
+put_8_bytes:	;input:
+;DE=bestemming in buffer
+;HL=sprite
+;destroys: HL,BC,A
+	push	DE
+	EX	DE,HL	;verwisselen, je kan niet iets adden bij DE
+	LD	BC,breedte
+put_8_bytes_loop:
+	LD	A,(DE)	;8x dit
+	LD	(HL),A
+	ADD	HL,BC
+	INC	DE
+	
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	LD	A,(DE)\	LD	(HL),A
+	ADD	HL,BC\	INC	DE
+	
+	POP	DE
+	INC	DE
+	
+	RET

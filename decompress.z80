@@ -1,0 +1,256 @@
+;21 tiles, LZ77
+
+;veel voorkomende tiles, 3 byte
+;niets		|	000
+;base		|	001
+;zonk		| 	010
+;infotron		|	011
+;muur		|	100
+;muur		|	101
+
+;redelijk vaak voorkomende tiles (30 / L), 12 in totaal
+;poortjes 4x	|110-	0000,0001,0010,0011
+;poortjes 2x	| 	0100,0101
+;LP	|	0110
+;batterij	|	0111
+;floppy	|	1000
+;schaar	|	1001
+;electron	|	1010
+;bug	|	1011
+
+;uncommon tiles:
+;poortje 1x	|110-	1100
+;end-block	|	1101
+;start-block	|	1110
+;terminal	|	1111
+
+;ongebruikt: 111 -> gebruiken voor LZ77:
+;111, lengt (5), pos (8), voorbeeld:
+;111 01010, 10000000 (7,10,128)
+;kopier 10+3 bytes van (HL - 128) naar (HL)
+
+move_compressed_to_grbuf:
+	LD	HL,table
+	LD	A,(current_level)
+	LD	E,A
+	LD	D,0
+	add	hl,de
+	add	hl,de
+	add	hl,de
+	inc	hl
+	LD	E,(HL)
+	inc	HL
+	LD	D,(hl)
+	ex	de,hl
+	LD	DE,grbuf
+	LD	BC,14*80
+	ldir
+	ret
+
+
+decompress_main:
+	call	von_haufmann_decompress
+	call	lz77_decompress
+	ret
+
+von_haufmann_decompress
+	ld	a,0
+	LD	(imathptr3),a
+	LD	IX,grbuf
+	;we hebben 3000 bytes, het grootste bestand is 22*58=1276 bytes, (0% compressie)
+	;we beginnen dus bij imathptr1+1276, dwz dat we 1276*2 bytes nodig hebben, laten we zeggen 2500 bytes
+	LD	HL,(imathptr1)
+	LD	DE,2500-1276
+	add	hl,de
+	; nu moeten we het aantal iteraties berekenen, dit zijn er maximaal 22*58
+	LD	DE,22*58+256	;=1276
+	; bij een "string found" trekken we er 3 af ipv 2
+von_haufmann_decompress_loop
+	LD	B,3
+	call	getbyte
+	
+	cp	%111
+	jr	z,von_haufmann_string
+	cp	%110
+	jr	z,bigtile	;een tile van 7 bytes
+store
+	LD	(hl),A
+	inc	hl
+	dec	de
+	jr	decompress_end
+von_haufmann_string:
+	LD	A,$30
+	LD	(HL),A
+	inc	hl
+	LD	B,8
+	call	getbyte
+	LD	(HL),A
+	inc	hl
+	LD	B,5
+	call	getbyte
+	LD	(HL),A
+	inc	HL
+	dec	de
+	dec	de
+	dec	de
+	jr	decompress_end
+bigtile:
+	LD	B,4
+	call	getbyte
+	
+	add	a,6
+	cp	20
+	jr 	c,$+2+1
+	inc	a
+	
+	cp	19
+	jr	c,$+2+1
+	inc	a
+	
+
+		
+	; LD B,6\ cp	0\ jr bigtiledone
+	; inc b\ cp	1\ jr bigtiledone
+	; inc b\ cp	2\ jr bigtiledone
+	; (....) tot 22, geen 21
+	; inc b
+bigtiledone
+	ld	(hl),a
+	inc	HL
+	dec 	de
+decompress_end:
+	xor	a
+	or	D
+	jr	nz,von_haufmann_decompress_loop
+	ret
+	
+;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+	
+getbyte:	;input: ix=bron
+	;imathptr3 is de bitcounter
+	;B is aantal bits
+	;output is A
+	;DESTROYS: niets
+	push	de
+	push	bc
+	LD	A,(imathptr4)
+	LD	D,A
+	LD	C,0
+	LD	A,(imathptr3)
+	or	a
+	jr	nz,getbyte_1
+	LD	D,(ix)
+getbyte_1:	rl	D
+	rl	C
+	inc	A
+	and	7
+	jr	nz,getbyte_2
+	inc	ix
+	LD	D,(ix)
+getbyte_2	djnz	getbyte_1
+	LD	(imathptr3),A
+	LD	A,D
+	LD	(imathptr4),A
+	LD	A,C
+	pop	bc
+	pop	de
+	ret
+	
+	
+;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+	
+lz77_decompress:
+	LD	HL,(imathptr1)
+	LD	DE,2500-1276
+	add	hl,de
+	;LD	HL,level_0
+	LD	BC,22*58+1
+	LD	IX,(imathptr1)	;output pointer
+	
+lz77_decompress_loop
+	LD	A,(HL)
+	CP	$30
+	jr	nz,tile
+string_found:
+	push	BC
+	
+	inc	hl 
+	LD	c,(HL)	;get string backtrack
+		
+	inc	hl
+	LD	A,(HL)	;get lengt + 3
+	add	a,5
+	
+	push	HL	;save pointer
+	push ix\ pop hl		
+	LD	E,C
+	LD	D,0
+	or	a
+	sbc	hl,de	;hl=bt pointer
+	
+	LD	C,0
+	LD	B,A
+string_found_loop
+	LD	A,(HL)
+	inc	hl
+	LD	(IX),a	;
+	inc	ix
+	djnz	string_found_loop
+		
+	pop	hl
+	pop	bc
+	inc	hl
+	jr	string_found_ret
+tile:	
+	LD	(IX),A
+	inc	IX
+	inc	HL
+string_found_ret
+	dec	bc
+	LD	A,C
+	or	B
+	jr	nz,lz77_decompress_loop
+	
+	;nu gaan we borders toevoegen:
+	LD	HL,(imathptr1)
+	LD	DE,22*58-1
+	add	hl,de
+	push	hl
+	LD	HL,(imathptr1)
+	LD	DE,24*60-1
+	add	hl,de
+	ex	de,hl
+	pop	hl
+	
+	LD	B,61
+	LD	A,5
+load_level_B
+	LD	(DE),A	;onderste border
+	dec	de
+	djnz	load_level_b
+	
+	LD	B,22
+load_level_C
+	push	bc
+	LD	BC,58
+	LDDR
+	LD	(DE),A
+	dec	de	
+	LD	(DE),A
+	dec	de
+	pop	bc
+	djnz	load_level_C
+	
+	LD	B,59
+load_level_D
+	LD	(DE),A	;top border
+	dec	de
+	djnz	load_level_D
+	
+	ret
+	
+	
+	
+;##########################################################################################
+;##########################################################################################
+;##########################################################################################

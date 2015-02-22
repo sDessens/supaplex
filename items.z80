@@ -1,0 +1,323 @@
+; data structuur:
+; xpos:		2
+; ypos:		2
+; beweging:	1
+; tile		1
+
+; mogelijke waarden voor: beweging
+; 4	niets..	11	;ja, 4, komt toch bijna nooit voor..
+; 0	omlaag	00	;de meest voorkomende
+; 1	links	01	;de op 1 na meest voorkomende
+; 2	rechts	10
+; 3	omhoog	11	;komt bijna nooit voor
+
+
+create_item:	;de routine die deze callt moet B schrijven naar de bestemming
+;input:	de x en y positie van de tile in DE en HL (hl=y..)
+;A, de beweging
+;B, de tile	vrijwel altijd een 2 of 3
+;hij heeft geen error checking, dus pas op..
+	 push	AF	;beweging opslaan
+	  push	HL
+	   push	DE	;in de goede volgorde..
+	   
+	   LD	HL,item_amount
+	   LD	A,(HL)
+	   inc	(HL)
+	   	   
+	   LD	L,A
+	   LD	E,A
+	   LD	H,0
+	   LD	D,0
+	   ADD	HL,HL	;2
+	   ADD	HL,DE	;3
+	   ADD	HL,HL	;6
+	   LD	DE,itemram
+	   ADD	HL,DE
+	
+	  pop	DE			;X
+	  LD	(HL),E\ inc	HL
+	  LD	(HL),D\ inc	HL
+	 pop	DE			;Y
+	 LD	(HL),E\ inc	HL
+	 LD	(HL),D\ inc	HL
+	pop	af		
+	LD	(HL),A\ inc	HL	;A=beweging
+	LD	(HL),B			;B=tile
+	RET
+	
+
+	
+delete_items:	
+	LD	A,(frame)
+	AND	%00000111
+	RET	NZ
+	LD	A,(item_amount)
+	or	a
+	ret	z
+	LD	B,A
+	LD	HL,savesscreen
+delete_items_loop:	;gettile doen, en daarna de tile in (HL) laden, simpel
+	 push	BC
+	 LD	E,(HL)\ inc	HL	;x
+	 LD	D,(HL)\ inc	HL	;x
+	 LD	C,(HL)\ inc	HL	;y
+	 LD	B,(HL)\ inc	HL	;y
+	 inc	HL			;beweging
+	 LD	A,(HL)\ inc	HL	;uhh.. tile?
+	  push	HL
+	  LD	H,B
+	  LD	L,C
+	  
+	  cp	2
+	  call	z,zonk_ai
+	  cp	3
+	  call	z,zonk_ai
+	  cp	15	;LP
+	  jr	Z,delete_lp
+LP_ret
+	   ;push	AF	;waarom nodig?
+	   CALL	gettile_8
+	  ;pop	af
+	  LD	(HL),A
+LP_ret2
+	 pop	HL
+	pop	BC
+	djnz	delete_items_loop	
+	
+	xor	a
+	LD	(item_amount),A
+	RET
+	
+delete_LP:
+	pop	ix
+	push	ix
+	push	af
+	LD	A,0
+	cp	(IX-2)
+	jr	z,fall_down
+	pop	af
+	jr	lp_ret	
+fall_down:
+	pop	af
+	
+	
+	push	hl
+	push	de
+	push	af
+	Ld	BC,8
+	add	hl,bc
+	call	gettile_8
+	LD	A,(HL)
+	or	a
+	jr	nz,_explosie
+	pop	af
+	pop	de
+	pop	hl
+	jr	z,LP_ret
+_explosie
+	LD	BC,-tilemap_breedte
+	add	hl,bc
+	xor	a
+	LD	(HL),0
+	pop	af
+	pop	de
+	pop	hl
+	push	hl
+	push	de
+	LD	c,explosie_tile
+	call	explosie_X
+	pop	de
+	pop	HL
+	JR	LP_ret2
+	
+zonk_ai:	;checkt zonk <-> ai detectie, zoek naar een "13" tile, en boem
+	push	af
+
+	 push	hl
+	  push	de
+	   push	bc
+	    call	gettile_8
+	    LD	Bc,tilemap_breedte
+	    add	hl,bc
+	    Ld	a,(HL)
+	   pop	bc
+	  pop	de
+	 pop	hl
+	 cp	17
+	 jr	z,boem
+	 cp	15
+	 jr	z,boem
+	pop	af
+
+	ret
+boem:		;he's gonna blow! :D
+	pop	af
+	pop	af	;stack
+	
+	LD	Bc,8
+	add	hl,bc
+	
+	push	hl
+	push	de
+	call	gettile_8
+	xor	a
+	LD	(HL),A
+	LD	BC,tilemap_breedte
+	add	hl,bc
+	LD	A,(HL)
+	cp	5
+	jr	z,$+2+2
+	xor	a
+	LD	(HL),A	
+	pop	de
+	pop	hl
+	
+	LD	C,explosie_tile
+	call	explosie_x	;volgens mij werkt dit niet met electrons..
+
+	jr	lp_ret2
+	
+	
+	
+update_items_if:
+	LD	A,(frame)
+	dec	a
+	AND	%00000111
+	RET	NZ
+	
+update_items:
+	LD	A,(item_amount)
+	or	a
+	ret	Z
+	LD	B,A
+	LD	HL,savesscreen
+update_items_loop:
+	push	BC
+	
+	LD	E,(HL)\	inc HL	;x
+	LD	D,(HL)\	inc HL	;x
+	LD	C,(HL)\	inc HL	;y
+	LD	B,(HL)\	inc HL	;y
+	LD	A,(HL)		;bew.
+	CP	1
+	JR	C,item_down
+	JR	Z,item_left
+	CP	3
+	JR	Z,item_up
+	JR	C,item_right	;best slim gedaan, vind ik..
+	JR	next_item
+;DE=x
+;BC=Y
+item_up:
+	DEC	BC		;knap als je dit meteen begrijpt..
+	inc	DE
+item_left:
+	dec	DE
+	dec	DE
+item_right
+	inc	DE
+	dec	BC	
+item_down:
+	inc	BC
+;nu alles terugzetten
+	dec	HL	;skip beweging
+	LD	(HL),B\	dec hl	;y
+	LD	(HL),C\	dec hl	;y
+	LD	(HL),D\	dec hl	;x
+	LD	(HL),E		;x
+;nu zit je bij het eerste element, dus..
+	LD	DE,4
+	ADD	HL,DE
+next_item:
+	inc	HL
+	inc	HL
+	pop	BC
+	DJNZ	update_items_loop
+	RET
+	
+	
+display_items_1:	;je moet eerst or'en, en daarna xor'en.. triest, kweet
+	LD	A,(item_amount)
+	or	a
+	ret	z
+	LD	B,A
+	LD	HL,savesscreen
+display_items_1_loop:
+	push	BC
+; xpos:		HL
+; ypos:		DE
+; beweging:	0
+; tile		IX
+; call		putspriteor
+	LD	C,(HL)\ inc	HL
+	LD	B,(HL)\ inc	HL
+	LD	E,(HL)\ inc	HL
+	LD	D,(HL)\ inc	HL
+	inc	HL
+	LD	A,(HL)\ inc	HL
+	push	HL	;pointer
+	push	DE	;Y
+	push	BC	;X
+	
+		;LD	A,1
+	
+	LD	L,A
+	LD	H,0
+	add	HL,HL
+	add	HL,HL
+	add	HL,HL
+	LD	DE,tile_sprites
+	ADD	HL,DE
+	push	HL
+	pop	IX
+	pop	HL
+	pop	DE
+	CALL	putspriteOR
+	pop	HL
+	pop	BC
+	DJNZ	display_items_1_loop
+	RET
+	
+	
+display_items_2:	;hetzelfde, maar dan met XOR, xD
+	LD	A,(item_amount)
+	or	a
+	ret	z
+	LD	B,A
+	LD	HL,savesscreen
+display_items_2_loop:
+	push	BC
+	LD	C,(HL)\ inc	HL
+	LD	B,(HL)\ inc	HL
+	LD	E,(HL)\ inc	HL
+	LD	D,(HL)\ inc	HL
+	inc	HL
+	LD	A,(HL)\ inc	HL
+	push	HL	;pointer
+	push	DE	;Y
+	push	BC	;X
+	
+		;LD	A,1
+	
+	LD	L,A
+	LD	H,0
+	add	HL,HL
+	add	HL,HL
+	add	HL,HL
+	LD	DE,tile_sprites
+	ADD	HL,DE
+	push	HL
+	pop	IX
+	pop	HL
+	pop	DE
+	CALL	putspriteXOR
+	pop	HL
+	pop	BC
+	DJNZ	display_items_2_loop
+	RET	
+	
+
+	
+	
+	

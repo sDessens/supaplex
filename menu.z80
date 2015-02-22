@@ -1,0 +1,415 @@
+;heb nog een optie menu nodig (later)
+;met o.a.:
+;lcd fix mode
+;inverted mode
+;fps 
+
+
+menu_main
+;input C=startpositie
+;B = relative positie van balk
+	di\ im 2
+	push	de
+	push	bc
+	LD	A,C
+	call	draw_entire_menu
+	pop	bc 
+	call	draw_menu_box
+	push	bc
+	call	fastcopy
+	pop	bc
+	pop	de
+menu_getkey:
+	inc	d
+	LD	A,D
+	cp	2
+	jr	z,menu_halt
+	
+	LD	A,$FE
+	out	($1),A
+	nop\ nop	
+	in	A,($1)
+	bit	3,a
+	jr 	z,menu_up
+	bit	0,a
+	jr	z,menu_down 
+	
+	LD	A,$FD
+	out	($1),A
+	nop\ nop
+	IN	A,($1)
+	bit	6,A
+	jr	z,menu_clear
+	
+	LD	A,$BF
+	out	($1),A
+	nop\ nop
+	IN	A,($1)
+	bit	5,A
+	jr	Z,menu_enter
+	
+	LD	D,0
+	jr	menu_getkey
+
+menu_halt	ei
+	push	bc
+	LD	B,100
+_	HALT
+	djnz	-_
+	pop	bc
+	jr	menu_getkey
+	
+menu_up:	
+	LD	A,B
+	cp	2
+	jr	c,scrollwindowup
+	dec	b
+	jr	menu_main
+scrollwindowup:	LD	A,C
+	cp	0
+	jr	z,scrollboxup
+	dec	C
+	jr	menu_main
+scrollboxup:	LD	A,B
+	or	a
+	jr	z,menu_getkey
+	dec	B	
+	jr	menu_main
+	
+menu_down:	
+	LD	A,B
+	cp	6
+	jr	nc,scrollwindowdown
+	inc	b
+	jr	menu_main
+scrollwindowdown 
+	LD	A,C
+	cp	((table_end-table-1)/3)-8
+	jr	z,scrollboxdown
+	inc	C
+	jr	menu_main
+scrollboxdown:	LD	A,B
+	cp	7
+	jr	z,menu_getkey
+	inc	B	
+	jr	menu_main
+	
+menu_clear:
+	ret
+	jp	menu_main
+
+menu_enter:
+	push	bc
+	LD	(menulocation),BC
+	LD	A,C
+	add	a,b
+	LD	(current_level),A
+	
+	call	level_start
+	call	mainloop
+	call	menu_fade
+	pop	bc
+	jp	menu_main
+	
+menu_fade:
+;fade het scherm uit en tovert het menu smooth op het scherm
+;zorg wel dat (menulocation) klopt
+	im 1
+	call	fade_out
+	call	menu_paint_full
+	call	fastcopy
+	call	fade_in
+	ret
+
+	
+menu_paint_full:
+	LD	A,(menulocation)
+	call	draw_entire_menu
+	LD	A,(menulocation+1)
+	LD	B,A
+	call	draw_menu_box
+	ret
+
+drawmenuborder:
+; we gebruiken een.. 14 breed buffer?
+; we maken eerst alles leeg:
+	LD	HL,grbuf
+	xor	a
+	LD	(HL),A
+	LD	D,H
+	LD	E,L
+	inc	de
+	LD	BC,14*80-1
+	ldir
+	
+drawmenuborder_NoErase:
+	LD	HL,grbuf+2+(14*8)
+	LD	C,8
+drawmenuborder_bigloop
+	LD	A,%00000011
+	LD	(HL),A
+	inc	hl
+	LD	A,$FF
+	LD	B,8
+drawmenuborderpart
+	LD	(HL),A
+	inc	hl
+	djnz	drawmenuborderpart
+	LD	A,%11100000
+	LD	(HL),A
+	LD	D,0
+	LD	E,5
+	add	hl,de
+	LD	A,%00000100
+	LD	(HL),A
+	LD	E,9
+	add	hl,de
+	LD	A,%00010000
+	LD	(HL),A
+	
+	LD	B,5
+drawmenuborder_part_loop
+	LD	E,5
+	add	hl,de
+	LD	A,%00001000
+	LD	(HL),A
+	LD	E,9
+	add	hl,de
+	LD	(HL),A
+	djnz	drawmenuborder_part_loop
+	
+	LD	E,5
+	add	hl,de
+	rra
+	LD	(HL),A
+	LD	E,9
+	add	hl,de
+	LD	A,%00010000
+	LD	(HL),a
+	
+	LD	E,5
+	add	hl,de
+	dec	c
+	jr	nz,drawmenuborder_bigloop
+	ret
+	
+draw_entire_menu
+;input a
+	push af
+	LD 	ix,table
+	LD 	D,0
+	LD	E,a
+	Ld	HL,table
+	add	hl,de
+	add 	hl,de
+	add	hl,de
+
+	push hl\ pop ix
+	call	drawmenuborder
+	pop af\ push af\ push ix
+	call	put_number_menu_all
+	pop ix\ pop af\ push af
+	call	put_text_menu_all
+	pop af
+	ret
+	
+draw_menu_box
+	push	af
+	push	bc
+;input B == locatie op scherm, beginnend bij 0
+	LD	HL,grbuf+(9*14)+2-(14*8)
+	LD	DE,14*8
+	inc	b
+_	
+	add	hl,de
+	djnz	-_
+	
+
+	LD	DE,5
+	LD	C,7
+invert_menu_box_loop:
+	LD	A,%00000111
+	xor	(HL)
+	LD	(HL),A
+	inc	HL
+	LD	B,8
+_	
+	LD	A,%11111111
+	xor	(HL)
+	LD	(HL),A
+	inc	hl
+	djnz	-_
+	LD	A,%11110000
+	xor	(HL)
+	LD	(HL),A
+	add	hl,de
+	dec	c
+	jr	nz,invert_menu_box_loop
+	pop	bc
+	pop	af
+	ret
+	
+	
+put_text_menu:
+;input: hl locatie in mem
+;A: Xpos%8
+;DE: pointer naar string (gebruikt find_n_level)
+	LD	A,7
+put_text_menu_loop	
+	LD	C,A
+	LD	A,(DE)\ inc DE
+	or	a\ ret z
+	sub	48
+	LD	B,A
+	LD	A,C
+	
+	push	hl
+	 push	af
+	  push	de
+	   call	put_char_at
+	  pop	de
+	 pop	af
+	pop	hl
+	
+	add	a,4
+	and	7
+	cp	4
+	jr	nc,qqqq
+	inc	hl
+qqqq:	jr	put_text_menu_loop
+	;routine ends here
+	
+put_text_menu_all:
+;input A
+	LD	B,8
+	LD	HL,grbuf+(10*14)+2
+	LD	DE,8*14
+put_text_menu_all_loop
+	LD	a,(ix)
+	inc ix\ inc ix\ inc ix
+	push	bc
+	 push	af
+	  push	de
+	   push	hl
+	    call	find_n_level
+	    ex	de,hl
+	    pop hl\ push hl
+	    call	put_text_menu
+	   pop	hl
+	  pop	de
+	  add	hl,de
+	 pop	af
+	 inc	a
+	pop	bc
+	djnz	put_text_menu_all_loop
+	ret
+	
+put_number_menu_all
+;input A
+	LD	DE,8*14
+	LD	HL,grbuf+(10*14)+1
+	Ld	B,8
+put_number_menu_loop
+	push	bc
+	push	hl
+	push	de
+	push	af
+	LD	a,(ix)
+	inc ix\ inc ix\ inc ix
+	call	put_number_menu
+	pop	af
+	inc	a
+	pop	de
+	pop	hl
+	add	hl,de
+	pop	bc
+	djnz	put_number_menu_loop
+	ret
+	
+put_number_menu
+;A: nummer wat je wil (max 255)
+;HL: locatie in mem
+	push	hl
+	call	convert_A
+	ex	de,hl
+	LD	B,D
+	pop	hl
+	push	HL
+	push	de
+	LD	A,0
+	call	put_char_at
+	pop	de
+	pop	hl
+	
+	push	hl
+	push	de
+	LD	a,E
+	and	%00001111
+	LD	B,A
+	LD	A,4
+	call	put_char_at
+	pop	de
+	pop	hl
+	LD	B,E
+	srl	B
+	srl	B
+	srl	B
+	srl	B
+	LD	A,0
+	inc	hl
+	call	put_char_at
+	ret
+	
+	
+	
+put_char_at
+;assume HL points to the correct location in mem
+;A is the x position modulo 8c
+;B is the tile number we need
+	push	hl	; save the pointer
+	LD	H,0
+	LD	L,h
+	LD	D,H
+	LD	E,b
+	add	hl,de
+	add	hl,hl
+	add	hl,hl
+	add	hl,de	;5 high
+	LD	De,numbers
+	add	hl,de
+	pop	de
+;now de have HL = source; DE = dest
+	LD	B,5	;+1 dus...
+	LD	C,A	;X pos
+	inc	c
+put_char_at_loop
+	push	BC
+	push	HL
+	LD	A,(HL)
+	and	%11110000
+	LD	H,A
+	LD	L,0
+qqqqqq
+	dec	c
+	jr	z,wwwwww
+	srl	h
+	rr	l
+	jr	qqqqqq
+wwwwww
+	ex	de,hl	
+	LD	A,D
+	or	(hl)
+	LD	(HL),A
+	inc	hl
+	LD	A,E
+	or	(HL)
+	LD	(HL),A
+	pop	de	;pointer
+	inc	de
+	LD	BC,13
+	add	hl,bc
+	ex	de,hl
+	
+	pop	bc
+	djnz	put_char_at_loop
+	ret 

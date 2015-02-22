@@ -1,0 +1,546 @@
+
+#define EQU .equ
+#define bcall(xxx) B_CALL(xxx)
+#define Bjump(xxx) B_jump(xxx)
+#include "relocate.inc"
+#include "ti83plusasm.inc"
+#include "app.inc"
+
+.org	$4000
+defpage(0,"Supaplex") 
+
+;-zwaartekracht....		
+;-ai <-> zonk hit detectie 	#50%
+;-ai verbeteren
+;-sprites naar ram verplaatsen (?)
+
+;ram areas:
+;statvars, 		531 bytes	= bijna vol
+;appbackupscreen, 	786 bytes	= niet veilig?
+;savesscreen, 		786 bytes	= veilig, gebruikt voor items
+;83A5h, md5buffer	64 bytes
+;op1-op6		11*6 bytes
+;8000h, appdata		256 bytes	gebruiken voor vijanden? 256 bytes aligned=cool :)
+;cmdShadow 		128 bytes	
+;ramCode 		304 bytes	$8100, interrupts?
+;tempSwapArea 		323 bytes
+;textshadow		128 bytes 
+
+grbuf		.equ	plotsscreen
+hoogte		.equ	10
+breedte		.equ	14
+tilemap_breedte	.equ	60	;uiteindelijk moet je deze gewoon kunnen veranderen...
+tilemap_hoogte	.equ	26
+bufferend	.equ	grbuf + (breedte*hoogte*8)-1
+
+X_start		.equ	2	;-2
+Y_start		.equ	2
+
+graphRAM	.equ	statvars	;352 bytes
+menuRAM		.equ	graphram+352	;12*8 bytes	bijna 100
+dataRAM		.equ	menuram+(12*8) 	;83 bytes over voor data
+menuram2	.equ	dataram+83-16
+
+itemram		.equ	savesscreen	
+AI_ram		.equ	$8000
+explosie_stack	.equ	ai_ram+$FF	;lang leve hex!, "groeit" naar beneden... is 4 bytes per explosie
+
+tilemapsize	.equ	2000
+mem_i_need	.equ	9*200	
+
+
+explosie_tile	.equ	21	
+mask:	.equ	$00
+
+;0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ <ascii
+;0123456789: ,-.?!ABCDEFGHIJKLMNOPQRSTUVWXYZ <ingame
+;de I heeft werk nodig...
+
+
+	call	game_start
+	
+	
+;###################################################################################################
+;####################################################################################################	
+	
+mainloop:
+
+
+	CALL	display_items_1		;teken
+	CALL	display_ai_1
+	CALL	putsprites		;teken
+	
+	call	swapmenu2
+	call	swapmenu
+	
+	call	delay
+	CALL	fastcopy		;update
+	
+	call	swapmenu
+	call	swapmenu2
+	
+	call	display_ai_2		
+	;CALL	display_infotrons	;update the amount of infotrons shown
+	;call	display_batterij
+	call	batterij_update
+	
+	CALL	erase_tile
+	
+	call	ai		;moet voor remove items troep
+	CALL	delete_items		;delete ALL items
+	call	remove_block	;verwijdert de blokkies van de ai, na ai, voor explosies
+	
+	call	erase_tile	;dat het nog werkt ook... zon snelle hack ^^	
+	call	verwijder_knipoog
+
+	CALL	verwijder_explosies	;kill (explosies) en verwijder de tiles
+	CALL	putsprites2		;wis
+	CALL	display_items_2		;wis
+	
+	CALL	update_X_scroll
+	CALL	update_Y_scroll
+	CALL	update_menu		;tekent aantal infotrons op het menu
+	
+	CALL	scroll_horizontal_check
+	CALL	scroll_vertical_check
+		
+	call	update_items
+	CALL	update_items_if	;je hebt immers maar 7 beweeg frames voordat alles gewist word, triest
+	
+	CALL	fall_tiles
+
+	CALL	adjust_sprite	
+	
+	CALL	getkey
+	call	batterij_timer_update
+	call	dec_push
+	CALL	pipe_check	;na getkey
+
+	
+	CALL	move_horizontal	;moet na getkey, anders krijg je een pixel afwijking als je door een pijp gaat
+	CALL	move_vertical	
+	CALL	update_AI
+	
+	LD	HL,frame
+	inc	(hl)
+	JR	mainloop
+	
+dispA:
+	push	af
+	push	hl
+	LD	L,A
+	LD	H,0
+	call disphl
+	pop	hl
+	pop	af
+	ret
+	
+dispDE:
+	ex de,hl
+	call disphl
+	ex de,hl
+	ret
+
+dispHL		;delete dit bij de beta...
+	di
+	im 1
+	push	DE
+	push	BC
+	push	AF
+	push	HL
+	LD	HL,0
+	LD	(currow),HL
+	pop	HL
+	push	HL
+	BCALL(_dispHL)
+	BCALL(_getkey)
+	pop	hL
+	pop	af
+	pop	bc	
+	pop	de
+	im 2
+	ei
+	ret
+	
+dispHL2		;delete dit bij de beta...
+	di
+	im 1
+	push	DE
+	push	BC
+	push	AF
+	push	HL
+	BCALL(_dispHL)
+	;BCALL(_getkey)
+	pop	hL
+	pop	af
+	pop	bc	
+	pop	de
+	im 2
+	ei
+	ret	
+
+getkey:	
+	LD	A,%11011111 
+	OUT	(1), A
+	nop\ nop
+	IN	A, (1)
+	bit	7,A
+	CALL	Z,pressed_alpha
+	
+
+	LD	A, %11111101    ; clear group
+	OUT	(1), A
+	nop\ nop
+	IN	A, (1)
+	bit	6,A
+	JP	Z,exit
+	
+	LD	A,(frame)
+	AND	%00000111
+	RET	NZ
+	
+	call	batterij_debounce	;de flag -1
+	
+	LD	HL,(X_pos)
+	LD	DE,(X_pos_temp)
+	or	A
+	SBC	HL,DE
+	RET	NZ
+	LD	HL,(Y_pos)
+	LD	DE,(Y_pos_temp)
+	or	A
+	SBC	HL,DE
+	RET	NZ
+	
+	LD     A, %10111111	;geeft hetzelfde terug als iemand 2nd indrukt xD
+	OUT    (1), A
+	nop\ nop
+	IN     A, (1)
+	
+	bit	5,A
+	JR	Z,pressed_2nd
+	
+		
+	LD     A, %11111110   
+	OUT    (1), A
+	nop\ nop
+	IN     A, (1)
+	
+	bit	2,A
+	Jp	Z,pressed_right
+	bit	1,A
+	Jp	Z,pressed_left
+	bit	3,A
+	Jp	Z,pressed_up
+	bit	0,A
+	Jp	Z,pressed_down	
+	
+	LD	A,(sprite)
+	cp	5
+	ret	nc
+	xor	a
+	LD	(sprite),A
+	
+	RET
+	
+
+pressed_2nd:		;lang leve copy-paste!
+	
+
+	
+	LD     A, %11111110   
+	OUT    (1), A
+	nop\ nop
+	IN     A, (1)
+	
+	bit	2,A
+	JR	Z,pressed_right_2nd
+	bit	1,A
+	JR	Z,pressed_left_2nd
+	bit	3,A
+	JR	Z,pressed_up_2nd
+	bit	0,A
+	JR	Z,pressed_down_2nd
+	
+	call	batterij_drop		;flag+2
+	
+	RET
+	
+pressed_right_2nd:
+	LD	HL,(X_POS)
+	LD	DE,8
+	ADD	HL,DE
+	EX	de,hl
+	LD	HL,(Y_pos)
+	push	HL
+	push	DE
+	CALL	knipoog
+	pop	DE
+	pop	HL
+	RET	NC
+	CALL	erase_tile_2
+	LD	A,1
+	LD	(sprite),A
+	RET
+	
+	
+pressed_left_2nd:
+	LD	HL,(X_POS)
+	LD	DE,-8
+	ADD	HL,DE
+	EX	de,hl
+	LD	HL,(Y_pos)
+	push	HL
+	push	DE
+	CALL	knipoog
+	pop	DE
+	pop	HL
+	RET	NC
+	CALL	erase_tile_2
+	LD	A,3
+	LD	(sprite),A
+	RET
+
+pressed_up_2nd:
+	LD	HL,(Y_POS)
+	LD	DE,-8
+	ADD	HL,DE
+	LD	DE,(X_pos)
+	push	HL
+	push	DE
+	CALL	knipoog
+	pop	DE
+	pop	HL
+	RET	NC
+	CALL	erase_tile_2
+	LD	A,3
+	LD	(sprite),A
+	RET
+	
+pressed_down_2nd:
+	LD	HL,(Y_POS)
+	LD	DE,8
+	ADD	HL,DE
+	LD	DE,(X_pos)
+	push	HL
+	push	DE
+	CALL	knipoog	;output carry
+	pop	DE
+	pop	HL
+	RET	NC
+	CALL	erase_tile_2
+	LD	A,1
+	LD	(sprite),A
+	RET
+
+
+	
+	
+pressed_right:
+	LD	HL,(X_POS)
+	LD	DE,8
+	ADD	HL,DE
+	push	HL
+	EX	de,hl
+	LD	HL,(Y_pos)
+	CALL	gettile_8
+	LD	B,6
+	CALL	is_tile_walkable
+	  push	af
+	  CALL	NZ,push_block_right
+	  pop	af
+	pop	HL
+	ret	NZ
+	LD	(X_pos),HL
+	LD	A,1
+	LD	(sprite),A
+	RET
+	
+pressed_left:
+	LD	HL,(X_POS)
+	LD	DE,-8
+	ADD	HL,DE
+	push	HL
+	EX	de,hl
+	LD	HL,(Y_pos)
+	CALL	gettile_8
+	LD	B,8
+	CALL	is_tile_walkable
+	  push	af
+	  CALL	NZ,push_block_left
+	  pop	af
+	pop	HL
+	ret	NZ
+	LD	(X_pos),HL
+	LD	A,3
+	LD	(sprite),A
+	RET
+	
+pressed_up:
+	LD	HL,(Y_POS)
+	LD	DE,-8
+	ADD	HL,DE
+	push	HL
+	LD	DE,(X_pos)
+	CALL	gettile_8
+	LD	B,9
+	CALL	is_tile_walkable
+	  push	af
+	  call	disc_push_up
+	  pop	af
+	pop	HL
+	ret	NZ	
+	LD	(Y_pos),HL
+	LD	A,3
+	LD	(sprite),A
+	RET
+
+pressed_down:
+	LD	HL,(Y_POS)
+	LD	DE,8
+	ADD	HL,DE
+	push	HL
+	LD	DE,(X_pos)
+	CALL	gettile_8
+	LD	B,7
+	CALL	is_tile_walkable
+	  push	af
+	  call	disc_push_down
+	  pop	af
+	pop	HL
+	ret	NZ
+	LD	(Y_pos),HL
+	LD	A,1
+	LD	(sprite),A
+	RET
+	
+pressed_alpha
+	LD	A,(frame)
+	and	7
+	ret	nz
+	
+	; LD	HL,(Y_pos_temp)
+	; LD	De,(X_pos_temp)
+	; call	explosie
+	; ret
+
+	LD	A,(menu_temp)
+	AND	%00000111
+	RET	NZ
+	LD	A,(menu)
+	xor	%00001000
+	LD	(menu),A
+	RET
+
+batterij_debounce	;flag -1
+	LD	A,(batterij_flag)
+	or	a
+	ret	z	;0? quit
+	sub	6
+	LD	(batterij_flag),A
+	ret	nc	;>= 0? quit
+	xor	a
+	LD	(batterij_flag),A	;min 0
+	ret	
+
+batterij_drop		;flag +2; if flag==5 drop_batterij
+	LD	A,(batterij)
+	or	a
+	ret	z
+
+	LD	A,(batterij_timer)
+	or	a
+	ret	nz
+
+	LD	A,(batterij_flag)
+	add	a,7
+	cp	10
+	LD	(batterij_flag),A
+	LD	A,8
+	LD	(sprite),A
+	ret	nz
+	xor	a
+	LD	(batterij_flag),A
+	call	drop_batterij
+	ret
+
+	
+	
+exit:	;ret naar menu!
+	pop	hl
+	ret
+		
+	; ld   a,%00000110	;;van spencer gekopierd, dont ask
+	; out   (4),a	;set int. speed
+	; IM 1
+
+; errtilemap:
+	;LD	DE,tilemap
+	;LD	HL,tilemapsize
+	;BCALL(_delmem)
+		
+	
+; errappvar:	;klooit alleen met de appvar
+	; LD	HL,AppVarName 
+	; rst	20h
+	; BCALL(_chkfindsym)
+	; LD	A,B
+	; or	A
+	; JR	NZ,arcived
+	; LD	HL,AppVarName 
+	; rst	20h
+	; bcall(_ARC_UNARC)
+; arcived:
+	; POP	HL
+	; LD	de,grbuf+(64*12)
+	; LD	hl,graphram
+	; LD	BC,352
+	; LDIR
+	; bjump(_JForceCmdNoChar)
+
+
+
+
+
+	
+
+
+title_screen:
+#include "titlescreen.bmp"
+
+#include "decompress.z80"
+
+#include "tile.z80"
+#include "items.z80"
+#include "AI.z80"
+
+#include "sprite.z80"
+#include "scroll.z80"
+#include "startup.z80"
+#include "menu.z80"
+	
+#include "appvar.z80"
+#include "fastcopy.z80"
+
+#include "tilesprites.z80"
+#include "murphy.z80"
+#include "AI sprites.z80"
+#include "data.z80"	
+
+
+program_end:
+
+leveldata:	
+level_0:
+;#include "/compressed/001.z80"
+#include levelset.z80
+#include "levels.z80"
+table:
+#include "table.z80"
+table_end
+.echo table
+
+validate()
+
+.end
+.end

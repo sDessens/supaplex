@@ -1,0 +1,435 @@
+;-----> Copy the gbuf to the screen (fast)
+;Input: nothing
+;43 bytes
+
+bufferbreedte	.equ	breedte
+bufferstart 	.equ	8*breedte+1
+
+fastcopy_if
+	LD	A,(frame)
+	and	%00000111
+	;RET	Z
+
+fastCopy:
+
+	ld	a,$80		;7
+	out	($10),a		;11
+	ld hl,grbuf+(bufferbreedte*(8*8-1))-1 + bufferstart ;10 ;grbug+(breedte*(8*hoogte-1))-1 + starting pos
+	ld	a,$20		;7
+	ld	c,a		;4
+	nop\ nop\ nop		;12
+fastCopyAgain:
+	ld	b,64		;7
+	inc	c		;4
+	ld	de,-(bufferbreedte*64)+1	;10
+	out	($10),a		;11
+	add	hl,de		;11
+	ld	de,bufferbreedte		;10
+fastCopyLoop:
+	add	hl,de		;11
+	nop\ nop\ nop		;12
+	inc	de		;6
+	ld	a,(hl)		;7
+	
+	xor	mask
+	out	($11),a		;11
+	dec	de		;6
+	djnz	fastCopyLoop	;13/8
+	ld	a,c		;4
+	cp	$2B+1		;7
+	jr	nz,fastCopyAgain ;10/1
+	ret			;10
+	
+	
+swapmenu2:
+	LD	A,(menu2_temp)
+	or	a
+	ret	z
+	
+	LD	E,A
+	add	a,a	;2
+	add	A,E	;3
+	add	a,a	;6
+	add	a,E	;7
+	add	a,a	;14	
+	LD	E,A
+	LD	D,0
+	
+	;LD	HL,grbuf+(breedte*10*8)-2 	;laatste byte van zichtbare buffer
+	;or	a
+	;sbc	hl,de
+	LD	IX,menuram2+(2*8)-1
+	LD	HL,grbuf-2+(8*breedte)
+	add	hl,de
+	
+	LD	C,8
+	LD	B,2
+swapmenu2_loop
+	LD	D,(IX)	;menu in D
+	LD	A,(HL)	;buffer in A
+	LD	(HL),D	;D naar buffer
+	LD	(IX),A	;A naar menu
+	DEC	HL
+	DEC	IX
+	djnz	swapmenu2_loop
+	LD	DE,12
+	or	a
+	sbc	hl,de
+	dec	c
+	JR	NZ,swapmenu2_loop-2	
+	ret
+	
+swapmenu:
+	LD	A,(menu_temp)
+	OR	A
+	ret	z
+	
+;a maal 14 doen
+	LD	E,A
+	add	a,a	;2
+	add	A,E	;3
+	add	a,a	;6
+	add	a,E	;7
+	add	a,a	;14	
+	LD	E,A
+	LD	D,0
+	
+	
+	LD	HL,grbuf+(breedte*10*8)-2 	;laatste byte van zichtbare buffer
+	or	a
+	sbc	hl,de
+	
+	LD	IX,menuram+(12*8)-1		;laatste byte menu
+	
+	LD	C,8
+	LD	B,12
+swapmenu_loop
+	LD	D,(IX)	;menu in D
+	LD	A,(HL)	;buffer in A
+	LD	(HL),D	;D naar buffer
+	LD	(IX),A	;A naar menu
+	DEC	HL
+	DEC	IX
+	djnz	swapmenu_loop
+	dec	hl
+	dec	hl
+	
+	
+	dec	c
+	JR	NZ,swapmenu_loop-2	
+	ret
+	
+display_string:
+;displays #37-terminated string at (IX), using 12-width buffer
+	LD	A,%11110000	;bitmask
+	cpl
+	LD	(bitmask),A
+display_string_loop
+	LD	A,(bitmask)
+	cpl
+	LD	(bitmask),A
+	bit	0,A
+	JR	NZ,$+3
+	inc	DE
+	
+	LD	A,(IX)		;string pointer
+	or	a
+	ret	z
+	sub	48
+	inc	IX
+
+	LD	L,A
+	LD	H,0
+	LD	C,L
+	LD	B,H
+	add	hl,hl
+	add	hl,hl
+	ADD	HL,BC	;x5
+	LD	BC,numbers
+	add	hl,BC
+	
+	push	DE
+	ex	de,hl
+;DE=bron
+;HL=bestemming
+;(bitmask)=mask, AND hiermee
+	LD	B,5
+write_loop:
+	push	BC
+	
+	LD	A,(DE)
+	LD	B,A
+	LD	A,(bitmask)
+	AND	B
+	or	(HL)
+	LD	(HL),A
+	
+	inc	DE
+	LD	BC,12
+	ADD	HL,BC
+	
+	POP	BC
+	djnz	write_loop
+	
+	pop	DE
+	JR	display_string_loop
+	
+	
+display_batterij
+	LD	DE,menuram2+14
+	LD	HL,menuram2+15
+	xor	a
+	LD	(HL),A
+	LD	BC,15
+	LDDR
+	LD	A,%10000000
+	LD	(HL),A
+	
+	
+	
+	Ld 	IX,menuram2+2
+	
+	LD	A,(batterij)
+	call	convert_A
+		
+		
+	LD	A,h	;100 tal
+	and	%00001111
+	push	HL
+	
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	LD	L,A
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+	
+	LD	C,%11110000	;bitmask
+	LD	DE,2
+	CALL	putnumber
+	pop	hl
+;/////////////////////////////////	
+	LD	A,L	;10 tal
+	and	%00001111
+	
+	push	HL
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	
+	LD	L,A	
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+;nu: 	HL=sprite adres
+	LD	C,%00001111	;bitmask
+	LD	DE,2
+	CALL	putnumber
+	pop	hl
+	
+	inc	ix
+	
+;///////////////////////////////
+	LD	A,L	;1 tal
+	and	%11110000
+	rra\ rra\ rra\ rra
+	push	HL
+	
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	
+	LD	L,A
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+;nu: 	HL=sprite adres
+	LD	C,%11110000	;bitmask
+	LD	DE,2
+	CALL	putnumber
+	pop	hl
+	
+	
+	LD 	HL,menuram2+2
+	LD	B,5
+eee:
+	SRL	(HL)\ inc hl
+	rr 	(HL)\ dec hl
+	SRL	(HL)\ inc hl
+	rr 	(HL)\ dec hl	
+	scf
+	rr	(HL)\ inc hl
+	rr	(HL)\ inc hl
+	djnz	eee
+	set	7,(HL)
+	
+	inc	hl
+	inc	hl
+	LD	A,255
+	LD	(HL),A
+	inc	hl
+	LD	(HL),A
+	RET
+
+
+	
+display_infotrons:
+;oude zooi clearen:
+	LD	HL,menuram+12+12+10
+	Ld	DE,11
+	LD	B,5
+	xor	a
+clear_loop:
+	LD	(HL),A
+	inc	HL
+	LD	(HL),A
+	ADD	HL,DE
+	DJNZ	clear_loop
+	
+	LD	A,(infotrons)
+	CALL	convert_A
+		
+	LD	IX,menuram+12+12+10
+	CALL	disp_HL
+	
+;nu moeten we de zooi de correcte kant op shiften:
+	LD	HL,menuram+12+12+10
+	LD	B,5
+	LD	DE,12
+shiftmenu_loop:
+	rr	(HL)\ inc	HL
+	RR	(HL)\ DEC	HL
+	scf
+	rr	(HL)\ inc	HL
+	RR	(HL)\ DEC	HL
+	srl	(HL)\ inc	HL
+	set	1,(HL)
+	RR	(HL)\ DEC	HL
+		
+	add	hl,DE
+	djnz	shiftmenu_loop
+	RET
+		
+	
+	
+convert_A:
+;converts A to devimal HL (BCD)
+	ld	HL,0
+loop_100:
+	CP	100
+	jr	C,less_than_100
+	sub	100
+	inc	H
+	JR	loop_100
+less_than_100:
+
+loop_10:
+	CP	10
+	jr	C,less_than_10
+	sub	10
+	inc	L
+	JR	loop_10
+less_than_10:
+	
+	or	a
+	rla\ rla\ rla\ rla
+	ADD	A,L
+	LD	L,A
+	RET
+		
+
+disp_HL:	;ja, ik heb 2 font routines..............
+		;hard coded... js ik ben lui xD
+;dispays BCD HL at IX (aligned..)
+
+	LD	A,h	;100 tal
+	and	%00001111
+	push	HL
+	
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	
+	LD	L,A
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+;nu: 	HL=sprite adres
+	LD	C,%11110000	;bitmask
+	LD	DE,12
+	CALL	putnumber
+	pop	hl
+	
+	
+	
+	
+	LD	A,L	;10 tal
+	and	%00001111
+	
+	push	HL
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	
+	LD	L,A	
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+;nu: 	HL=sprite adres
+	LD	C,%00001111	;bitmask
+	LD	DE,12
+	CALL	putnumber
+	pop	hl
+	
+	INC	IX
+	
+	LD	A,L	;1 tal
+	and	%11110000
+	rra\ rra\ rra\ rra
+	push	HL
+	
+	LD	L,A	;maal 5..
+	add	a,a
+	add	a,a
+	add	A,L
+	
+	LD	L,A
+	LD	H,0
+	LD	DE,numbers
+	add	HL,DE	;hl is sprite adres
+;nu: 	HL=sprite adres
+	LD	C,%11110000	;bitmask
+	LD	DE,12
+	CALL	putnumber
+	pop	hl
+	RET
+		
+	
+	
+
+
+putnumber:	;tekent (HL) AND bitmask OR (IX)...
+	push	ix
+	LD	B,5
+putnumber_loop
+	LD	A,(HL)
+	AND	C
+	OR	(IX)
+	LD	(IX),A
+	
+	LD	(IX),A
+	inc	HL
+	ADD	IX,DE
+	djnz	putnumber_loop
+	pop	ix
+	ret
+	
+	
+
+#include "charset.z80"	
