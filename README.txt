@@ -1,7 +1,7 @@
 # What's this?
 An port of the classical DOS game supaplex.　Now available for your graphics calculator!
 
-![animated gameplay gif](https://raw.githubusercontent.com/wiki/sDessens/supaplex/supaplex43.gif)
+![animated gameplay gif](/../../wiki/sDessens/supaplex/supaplex43.gif)
 
 # Is this game finished?
 No. There are still a few bugs and missing features. You can't die yet.
