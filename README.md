@@ -5,14 +5,15 @@ An port of the classical DOS game supaplex.　Now available for your graphics ca
 
 # Is this game finished?
 No. There are still a few bugs and missing features. You can't die yet.
+
 I stopped the development of this game once i realized just how bad the LCD on the TI-84+ is.
 
 # Technical teatures
 For something built with less than a year experience in programming, the feature set is quite nice:
-levels compressed with lz77 + von huffmann encoding.
-custom custom tilemap engine.
-most of the features in the original game, such as AI, bombs and physics, work.
-The only thing i've copied from someone else is a routine called fastcopy.
+- levels compressed with lz77 + von huffmann encoding.
+- custom custom tilemap engine.
+- most of the features in the original game, such as AI, bombs and physics, work.
+- Everything, except a routine called fastcopy, is custom built.
 
 The physics are not completely identical to the original game, my version only accepts key input every 8th frame.
 
@@ -33,4 +34,4 @@ the level names are in "data.z80"
 what are levels.bat and table.bat?
 these recreate levels.z80 and table.z80, if you entered your custom levels in here: don't run these
 
-Initial version released 11-04-2010
+Initial version released 11-04-2010. Development started somewhere in 2008
